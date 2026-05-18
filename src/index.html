@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Echora - AI Hub</title>
+  <link rel="stylesheet" href="ui/styles.css">
+</head>
+<body>
+
+<!-- ===== 启动向导 (首次使用) ===== -->
+<div id="welcome-overlay" class="overlay hidden">
+  <div class="welcome-card">
+    <div class="welcome-header">
+      <span class="logo-text">🌊 Echora</span>
+      <span class="welcome-step">初次启动 · 环境检查</span>
+    </div>
+    <div id="env-check-list" class="env-list">
+      <!-- 动态填充 -->
+    </div>
+    <div class="welcome-divider"></div>
+    <div id="ai-detect-list" class="ai-detect-list">
+      <!-- 动态填充 -->
+    </div>
+    <div class="welcome-actions">
+      <button id="btn-rescan" class="btn btn-secondary">🔍 重新扫描</button>
+      <button id="btn-done" class="btn btn-primary">✅ 完成设置，进入 Echora</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 主界面 ===== -->
+<div id="app" class="app-container">
+
+  <!-- 左侧面板 - Agent 联系人列表 -->
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-header">
+      <h1 class="logo">🌊 Echora</h1>
+      <div class="header-actions">
+        <button id="btn-refresh" class="btn-icon" title="刷新状态">🔄</button>
+        <span class="version">v0.3</span>
+      </div>
+    </div>
+
+    <!-- 搜索框 -->
+    <div class="sidebar-search">
+      <input type="text" id="agent-search" placeholder="🔍 搜索 Agent..." autocomplete="off">
+    </div>
+
+    <!-- Agent 列表（占据主体） -->
+    <nav id="agent-list" class="agent-list">
+      <!-- 动态填充：agent 头像 + 名称 + AI 归属标签 + 状态点 -->
+    </nav>
+
+    <!-- 底部分隔线 -->
+    <div class="sidebar-divider"></div>
+
+    <!-- 抽屉式管理面板 -->
+    <div id="sidebar-drawer" class="sidebar-drawer">
+      <button id="btn-toggle-drawer" class="btn-drawer-toggle">
+        <span class="drawer-label">🧭 功能菜单</span>
+        <span id="drawer-arrow" class="drawer-arrow">▼</span>
+      </button>
+      <div id="drawer-content" class="drawer-content collapsed">
+        <nav id="drawer-menu" class="drawer-menu">
+          <button class="drawer-menu-item active" data-view="chat">
+            <span class="menu-icon">🗣️</span>
+            <span class="menu-label">AI 对话</span>
+          </button>
+          <button class="drawer-menu-item" data-view="ai-mgmt">
+            <span class="menu-icon">🖥️</span>
+            <span class="menu-label">AI 管理</span>
+          </button>
+          <button class="drawer-menu-item" data-view="conv-mgmt">
+            <span class="menu-icon">💬</span>
+            <span class="menu-label">会话管理</span>
+          </button>
+          <button class="drawer-menu-item" data-view="skills">
+            <span class="menu-icon">🧩</span>
+            <span class="menu-label">Skill</span>
+          </button>
+          <button class="drawer-menu-item" data-view="cron">
+            <span class="menu-icon">⏰</span>
+            <span class="menu-label">定时任务</span>
+          </button>
+          <button class="drawer-menu-item" data-view="env">
+            <span class="menu-icon">💻</span>
+            <span class="menu-label">运行环境</span>
+          </button>
+          <button class="drawer-menu-item" data-view="settings">
+            <span class="menu-icon">⚙️</span>
+            <span class="menu-label">系统设置</span>
+          </button>
+        </nav>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 右侧主内容 -->
+  <main class="main-content">
+
+    <!-- 顶部状态栏 -->
+    <header id="topbar" class="topbar">
+      <div class="topbar-left">
+        <button id="btn-back-chat" class="btn-back hidden" title="返回对话">←</button>
+        <span id="current-ai-name" class="current-ai">选择一个 Agent 开始对话</span>
+        <select id="conv-selector" class="conv-selector hidden" title="切换会话"></select>
+        <button id="btn-new-conv" class="btn-new-conv hidden" title="新建会话">+</button>
+      </div>
+      <div class="topbar-right">
+        <div id="env-status" class="env-status">
+          <!-- 环境状态指示灯 -->
+        </div>
+      </div>
+    </header>
+
+    <!-- 多视图容器 -->
+    <div id="view-container" class="view-container">
+
+      <!-- 视图：AI 对话（默认） -->
+      <div id="view-chat" class="main-view active">
+        <section id="chat-area" class="chat-area">
+          <div id="chat-messages" class="chat-messages">
+            <div class="empty-state">
+              <div class="empty-icon">🌊</div>
+              <h2>欢迎使用 Echora</h2>
+              <p>左侧选择 Agent，开启跨 AI 对话体验</p>
+              <div class="empty-tips">
+                <span>💡 点击左侧 Agent 头像切换对话对象</span>
+                <span>⚡ 下方菜单可管理 AI、Skill、定时任务等</span>
+              </div>
+            </div>
+          </div>
+        </section>
+        <footer id="input-area" class="input-area">
+          <div class="input-hint" id="input-hint">请先选择 Agent</div>
+          <div class="input-row">
+            <textarea id="chat-input" class="chat-input" placeholder="输入消息..." rows="1" disabled></textarea>
+            <button id="btn-send" class="btn btn-send" disabled>⬆️</button>
+          </div>
+        </footer>
+      </div>
+      <!-- 视图：AI 管理 -->
+      <div id="view-ai-mgmt" class="main-view">
+        <div class="view-content">
+          <h2 class="view-title">🖥️ AI 软件管理</h2>
+          <p class="view-desc">管理已添加的 AI 软件，配置启动路径和端口</p>
+          <div id="mgmt-ai-list" class="mgmt-ai-list">
+            <!-- 动态填充 -->
+          </div>
+          <div class="view-actions">
+            <button id="btn-mgmt-add" class="btn btn-primary">➕ 手动添加</button>
+            <button id="btn-mgmt-detect" class="btn btn-secondary">🔍 自动检测</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 视图：会话管理 -->
+      <div id="view-conv-mgmt" class="main-view">
+        <div class="view-content">
+          <div class="view-header-row">
+            <h2 class="view-title">💬 会话管理</h2>
+            <button id="btn-delete-all-convs" class="btn btn-danger-outline btn-sm">🗑️ 清空全部</button>
+          </div>
+          <p class="view-desc">管理所有 AI 对话会话</p>
+          <div id="conv-mgmt-list" class="conv-mgmt-list">
+            <!-- 动态填充 -->
+          </div>
+        </div>
+      </div>
+
+      <!-- 视图：Skill 管理 -->
+      <div id="view-skills" class="main-view">
+        <div class="view-content">
+          <h2 class="view-title">🧩 Skill 管理</h2>
+          <p class="view-desc">管理和安装 Agent 技能扩展</p>
+          <div class="empty-view">
+            <div class="empty-icon">🚧</div>
+            <p>Skill 管理功能即将上线</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 视图：定时任务 -->
+      <div id="view-cron" class="main-view">
+        <div class="view-content">
+          <h2 class="view-title">⏰ 定时任务</h2>
+          <p class="view-desc">管理周期性任务和提醒</p>
+          <div class="empty-view">
+            <div class="empty-icon">🚧</div>
+            <p>定时任务功能即将上线</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 视图：运行环境 -->
+      <div id="view-env" class="main-view">
+        <div class="view-content">
+          <h2 class="view-title">💻 运行环境</h2>
+          <p class="view-desc">检测和管理系统运行依赖</p>
+          <div id="env-detail-panel" class="env-detail-panel">
+            <!-- 动态填充 -->
+          </div>
+        </div>
+      </div>
+
+      <!-- 视图：设置 -->
+      <div id="view-settings" class="main-view">
+        <div class="view-content">
+          <h2 class="view-title">⚙️ 系统设置</h2>
+          <p class="view-desc">Echora 配置选项</p>
+          <div class="empty-view">
+            <div class="empty-icon">🚧</div>
+            <p>设置功能即将上线</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<!-- ===== 手动添加 AI 对话框 ===== -->
+<div id="add-ai-modal" class="modal hidden">
+  <div class="modal-card">
+    <h3>添加 AI 软件</h3>
+    <div class="form-group">
+      <label>AI 类型</label>
+      <select id="select-ai-type">
+        <option value="">选择 AI 软件...</option>
+        <!-- 动态填充 -->
+      </select>
+    </div>
+    <div class="form-group">
+      <label>程序路径 (支持 .exe / .cmd / .bat 或安装目录)</label>
+      <div class="path-row">
+        <input type="text" id="input-ai-path" placeholder="C:\Users\ohfen\.openclaw\gateway.cmd">
+        <button id="btn-browse" class="btn btn-secondary">浏览文件</button>
+        <button id="btn-browse-dir" class="btn btn-secondary">选目录</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>网关端口 (可选)</label>
+      <input type="number" id="input-ai-port" placeholder="默认端口">
+    </div>
+    <div class="modal-actions">
+      <button id="btn-cancel-add" class="btn btn-secondary">取消</button>
+      <button id="btn-save-ai" class="btn btn-primary">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 环境配置弹窗 ===== -->
+<div id="env-modal" class="modal hidden">
+  <div class="modal-card">
+    <h3>⚙️ 环境配置</h3>
+    <div id="env-detail-list" class="env-detail-list">
+      <!-- 动态填充 -->
+    </div>
+    <div class="modal-actions">
+      <button id="btn-close-env" class="btn btn-primary">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script src="ui/renderer.js"></script>
+</body>
+</html>

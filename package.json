@@ -1,0 +1,45 @@
+{
+  "name": "echora",
+  "version": "0.1.0",
+  "description": "打通本地 AI 软件壁垒，统一管理网关与对话 — Echo + Ora（声音+祈祷），让 AI 之间彼此听见",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "launch": "start start.cmd",
+    "desktop": "start setup-desktop.cmd",
+    "verify": "node scripts/verify-closure.js .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "build": {
+    "appId": "com.echora.app",
+    "productName": "Echora",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "assets/**/*",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.png"
+    }
+  },
+  "keywords": ["ai", "chat", "gateway", "agent", "hub"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "dependencies": {
+    "find-process": "^1.4.10",
+    "ps-list": "^8.1.1"
+  }
+}

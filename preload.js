@@ -1,0 +1,103 @@
+// Echora - Preload Script v0.2 (安全 IPC 桥梁)
+
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('echora', {
+  // ===== 网关管理 =====
+  gateway: {
+    // 启动
+    start: (aiType, exePath, config) =>
+      ipcRenderer.invoke('gateway:start', { aiType, exePath, config }),
+
+    // 停止
+    stop: (aiType) =>
+      ipcRenderer.invoke('gateway:stop', aiType),
+
+    // 重启
+    restart: (aiType) =>
+      ipcRenderer.invoke('gateway:restart', aiType),
+
+    // 获取全部状态
+    status: () =>
+      ipcRenderer.invoke('gateway:status'),
+
+    // 🆕 刷新：重新扫描运行中的网关
+    refresh: () =>
+      ipcRenderer.invoke('gateway:refresh'),
+
+    // 🆕 手动接管网关
+    attach: (aiType, port) =>
+      ipcRenderer.invoke('gateway:attach', aiType, port),
+
+    // 监听网关状态变化
+    onStatusChange: (callback) => {
+      const handler = (event, data) => callback(data);
+      ipcRenderer.on('gateway:statusChange', handler);
+      return () => ipcRenderer.removeListener('gateway:statusChange', handler);
+    },
+
+    // 🆕 监听启动时全量网关状态
+    onStatusAll: (callback) => {
+      const handler = (event, data) => callback(data);
+      ipcRenderer.on('gateway:statusAll', handler);
+      return () => ipcRenderer.removeListener('gateway:statusAll', handler);
+    },
+
+    // 监听网关消息（AI 回复）
+    onMessage: (callback) => {
+      const handler = (event, data) => callback(data);
+      ipcRenderer.on('gateway:message', handler);
+      return () => ipcRenderer.removeListener('gateway:message', handler);
+    },
+  },
+
+  // ===== 配置管理 =====
+  config: {
+    get: (key) => ipcRenderer.invoke('config:get', key),
+    set: (key, value) => ipcRenderer.invoke('config:set', key, value),
+    getAll: () => ipcRenderer.invoke('config:getAll'),
+  },
+
+  // ===== AI 软件管理 =====
+  ai: {
+    setPath: (aiType, exePath) => ipcRenderer.invoke('ai:setPath', aiType, exePath),
+    removePath: (aiType) => ipcRenderer.invoke('ai:removePath', aiType),
+    rescan: () => ipcRenderer.invoke('ai:rescan'),
+    scan: () => ipcRenderer.invoke('ai:scan'),
+  },
+
+  // ===== 环境检查 =====
+  env: {
+    check: () => ipcRenderer.invoke('env:check'),
+    install: (tool) => ipcRenderer.invoke('env:install', tool),
+  },
+
+  // ===== 文件对话框 =====
+  dialog: {
+    openFile: (options) => ipcRenderer.invoke('dialog:openFile', options),
+    openDir: (options) => ipcRenderer.invoke('dialog:openDir', options),
+  },
+
+  // ===== Agent 管理 =====
+  agent: {
+    list: (aiType) => ipcRenderer.invoke('agent:list', aiType),
+  },
+
+  // ===== 消息通道（AI 对话） =====
+  message: {
+    send: (aiType, agentId, text, userId) =>
+      ipcRenderer.invoke('message:send', { aiType, agentId, text, userId }),
+    status: (aiType) =>
+      ipcRenderer.invoke('message:status', aiType),
+  },
+
+  // ===== 启动事件 =====
+  onStartup: {
+    envCheck: (callback) => {
+      ipcRenderer.on('startup:env-check', (event, data) => callback(data));
+    },
+    aiDetected: (callback) => {
+      ipcRenderer.on('startup:ai-detected', (event, data) => callback(data));
+    },
+  },
+});
