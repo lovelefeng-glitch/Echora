@@ -1,4 +1,4 @@
-// Hermes 适配器 v3.1
+﻿// Hermes 适配器 v3.1
 // 通过 Hermes Gateway API Server 对接（端口 8083）
 // Hermes 自己管理会话上下文、工具调用、记忆、技能
 // Echora 只发最新一条消息，Hermes 从 state.db 加载历史
@@ -373,3 +373,5 @@ class HermesAdapter extends BaseAdapter {
 }
 
 module.exports = HermesAdapter;
+
+
