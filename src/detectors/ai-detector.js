@@ -1,4 +1,4 @@
-// AI 软件自动检测器 v0.3
+﻿// AI 软件自动检测器 v0.3
 // 三层发现机制: 进程名扫描 + 端口反推 + 状态文件读取
 
 const PortScanner = require('./port-scanner');
@@ -24,7 +24,7 @@ const KNOWN_AI_SOFTWARE = {
       { processName: 'hermes-agent.exe', cmdlineIncludes: null },
     ],
     configPattern: 'config.yaml',
-    apiServerPort: 8642,
+    apiServerPort: 8645,
   },
   qclaw: {
     name: 'QClaw',
@@ -457,3 +457,4 @@ const AIDetector = {
 };
 
 module.exports = AIDetector;
+

@@ -33,7 +33,7 @@ const GATEWAY_FINGERPRINTS = {
   hermes: {
     name: 'Hermes',
     category: 'agent',
-    knownPorts: [8642, 8080],
+    knownPorts: [8645, 8642],
     httpChecks: [
       { path: '/health', expectStatus: [200] },
       { path: '/v1/models', expectStatus: [200, 401] },

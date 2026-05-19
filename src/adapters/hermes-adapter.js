@@ -1,5 +1,5 @@
-// Hermes 适配器 v1.0
-// 对接 Hermes API Server（OpenAI 兼容端点）
+// Hermes 适配器 v2.0
+// 通过 Hermes Proxy (hermes proxy start --provider custom) 对接
 // 依赖：Node 内置 http 模块 + js-yaml（配置解析）
 
 const BaseAdapter = require('./base-adapter');
@@ -8,179 +8,264 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const yaml = require('js-yaml');
+const os = require('os');
+
+// 默认代理端口（hermes proxy start 默认监听）
+const DEFAULT_PROXY_PORT = 8645;
 
 class HermesAdapter extends BaseAdapter {
   /**
-   * @param {object} config - { exePath, port, token, baseUrl? }
+   * @param {object} config - { exePath, port, token, baseUrl?, hermesRoot? }
    */
   constructor(config = {}) {
     super(config);
     this.name = 'hermes';
-    this.token = config.token || process.env.API_SERVER_KEY || '';
-    this.baseUrl = config.baseUrl || `http://127.0.0.1:${config.port || 8642}`;
+    // 代理端口（不是 Hermes 内部端口）
+    this.proxyPort = config.port || config.proxyPort || DEFAULT_PROXY_PORT;
+    this.baseUrl = config.baseUrl || `http://127.0.0.1:${this.proxyPort}`;
+    this.token = config.token || 'no-key-needed'; // proxy 不校验 token
     this._proc = null;
-    this._chatEndpoint = '/v1/chat/completions'; // Hermes 使用标准 OpenAI 端点
-    this._requestTimeout = 120000; // Hermes 可能处理复杂任务
-    this._sessionId = null;
+    this._chatEndpoint = '/v1/chat/completions';
+    this._requestTimeout = 120000;
+
+    // 从 Hermes 配置读取 provider 信息
+    this._hermesConfig = null;
+    this._providerConfig = null;
   }
 
   /**
-   * 设置 Hermes session ID（用于上下文维持）
-   * @param {string} sessionId
+   * 读取 Hermes config.yaml，提取自定义 provider 的 base_url 和 api_key
    */
-  setSessionId(sessionId) {
-    this._sessionId = sessionId;
+  _loadHermesConfig() {
+    if (this._hermesConfig) return this._hermesConfig;
+
+    const hermesRoot = this.config.hermesRoot
+      || path.join(os.homedir(), 'AppData', 'Local', 'hermes');
+    const configPath = path.join(hermesRoot, 'config.yaml');
+
+    if (!fs.existsSync(configPath)) {
+      console.warn('[HermesAdapter] config.yaml not found:', configPath);
+      return null;
+    }
+
+    try {
+      const raw = fs.readFileSync(configPath, 'utf8');
+      this._hermesConfig = yaml.load(raw);
+
+      // 提取当前使用的 provider 信息
+      const modelName = this._hermesConfig?.model?.default;
+      const customProviders = this._hermesConfig?.custom_providers || [];
+
+      // 查找匹配的 custom provider
+      for (const cp of customProviders) {
+        if (cp.model === modelName || cp.name) {
+          this._providerConfig = {
+            name: cp.name,
+            baseUrl: cp.base_url,
+            apiKey: cp.api_key,
+            model: cp.model || modelName,
+          };
+          break;
+        }
+      }
+
+      // 如果没找到匹配的 custom provider，用第一个
+      if (!this._providerConfig && customProviders.length > 0) {
+        const cp = customProviders[0];
+        this._providerConfig = {
+          name: cp.name,
+          baseUrl: cp.base_url,
+          apiKey: cp.api_key,
+          model: cp.model || modelName,
+        };
+      }
+
+      return this._hermesConfig;
+    } catch (e) {
+      console.warn('[HermesAdapter] 读取 config.yaml 失败:', e.message);
+      return null;
+    }
   }
 
   /**
-   * 启动 Hermes API Server
-   * 命令: hermes gateway run --platform api_server
+   * 获取 hermes 可执行文件路径
+   */
+  _getHermesExe() {
+    const exePath = this.config.exePath || this.config.execPath;
+    if (exePath && fs.existsSync(exePath)) return exePath;
+
+    // 常见路径
+    const candidates = [
+      path.join(os.homedir(), 'AppData', 'Local', 'hermes', 'hermes-agent', 'venv', 'Scripts', 'hermes.exe'),
+      path.join(os.homedir(), 'AppData', 'Local', 'hermes', 'hermes.exe'),
+    ];
+    for (const c of candidates) {
+      if (fs.existsSync(c)) return c;
+    }
+    return null;
+  }
+
+  /**
+   * 启动 Hermes Proxy
+   * 命令: hermes proxy start --provider custom --base-url <URL> --api-key <KEY>
    */
   async start() {
+    // 先检查是否已在运行
     const alive = await this.getStatus();
     if (alive.status === 'running') {
-      return { success: true, message: 'Hermes API Server 已在运行' };
+      return { success: true, message: 'Hermes Proxy 已在运行' };
     }
 
-    const exePath = this.config.exePath || this.config.execPath || '';
-    if (!exePath) {
-      return { success: false, message: '未配置 Hermes 可执行文件路径' };
+    // 读取 Hermes 配置
+    this._loadHermesConfig();
+    if (!this._providerConfig) {
+      return { success: false, message: '未找到 Hermes 自定义 Provider 配置（config.yaml 中的 custom_providers）' };
     }
 
-    // 启动参数：gateway run --platform api_server
-    const args = ['gateway', 'run', '--platform', 'api_server'];
-    if (this.config.port) {
-      args.push('--port', String(this.config.port));
-    }
-    // 如果有 profile，也加上
-    if (this.config.profile) {
-      args.push('-p', this.config.profile);
+    const hermesExe = this._getHermesExe();
+    if (!hermesExe) {
+      return { success: false, message: '未找到 Hermes 可执行文件' };
     }
 
-    // 环境变量：API Server 相关配置
-    const env = { ...process.env };
-    if (this.token) {
-      env.API_SERVER_KEY = this.token;
-    }
-    env.API_SERVER_ENABLED = 'true';
-    if (this.config.port) {
-      env.API_SERVER_PORT = String(this.config.port);
-    }
+    // 构建启动参数
+    const args = [
+      'proxy', 'start',
+      '--provider', 'custom',
+      '--base-url', this._providerConfig.baseUrl,
+      '--api-key', this._providerConfig.apiKey,
+      '--port', String(this.proxyPort),
+    ];
 
-    const cwd = path.dirname(exePath);
-    if (fs.existsSync(cwd)) {
-      // 尝试定位 hermes 可执行文件
-      const hermesBin = process.platform === 'win32' ? 'hermes.exe' : 'hermes';
-      const fullExe = fs.existsSync(path.join(cwd, hermesBin))
-        ? path.join(cwd, hermesBin)
-        : exePath;
+    const cwd = path.dirname(hermesExe);
 
-      this._proc = spawn(fullExe, args, {
-        cwd,
-        env,
-        detached: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-    } else {
-      this._proc = spawn(exePath, args, {
-        env,
-        detached: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-    }
+    this._proc = spawn(hermesExe, args, {
+      cwd,
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    this._proc.stdout?.on('data', (d) => {
+      console.log('[Hermes Proxy]', d.toString().trim());
+    });
+    this._proc.stderr?.on('data', (d) => {
+      console.warn('[Hermes Proxy]', d.toString().trim());
+    });
 
     this.status = 'starting';
 
     try {
-      await this._waitForReady(20000);
-      return { success: true, message: 'Hermes API Server 启动成功' };
+      await this._waitForReady(15000);
+      return { success: true, message: `Hermes Proxy 启动成功 (${this._providerConfig.name})` };
     } catch (e) {
       this.status = 'error';
       return { success: false, message: e.message };
     }
   }
 
+  /**
+   * 停止 Hermes Proxy
+   */
   async stop() {
     if (this._proc) {
       try { this._proc.kill('SIGTERM'); } catch (e) {}
       this._proc = null;
     }
+    // 也尝试通过端口找到并 kill 进程
+    try {
+      const { execSync } = require('child_process');
+      const netstat = execSync('netstat -ano', { encoding: 'utf-8', timeout: 3000 });
+      const lines = netstat.split('\n');
+      for (const line of lines) {
+        const m = line.match(new RegExp(`TCP\\s+127\\.0\\.0\\.1:${this.proxyPort}\\s+\\S+\\s+LISTENING\\s+(\\d+)`));
+        if (m) {
+          execSync(`taskkill /PID ${m[1]} /F`, { stdio: 'ignore' });
+          break;
+        }
+      }
+    } catch (e) {}
     this.status = 'offline';
     return { success: true };
   }
 
   /**
-   * 获取 Hermes API Server 状态
+   * 获取状态
    */
   async getStatus() {
     try {
       const data = await this._httpGet('/health');
-      if (data && (data.ok || data.status === 'ok' || data.status === 'running')) {
+      if (data && (data.status === 'ok' || data.ok)) {
         this.status = 'running';
-        return { status: 'running', uptime: data.uptime || 0, hasChatAPI: true };
+        return {
+          status: 'running',
+          hasChatAPI: true,
+          provider: data.upstream || 'unknown',
+          authenticated: data.authenticated || false,
+        };
       }
-    } catch (e) {
-      // /health 可能不存在，尝试 /v1/models 作为备选
-      try {
-        const data = await this._httpGet('/v1/models');
-        if (data && (data.data || data.object === 'list')) {
-          this.status = 'running';
-          return { status: 'running', hasChatAPI: true };
-        }
-      } catch (e2) {}
-    }
+    } catch (e) {}
+
+    // 尝试 /v1/models
+    try {
+      const data = await this._httpGet('/v1/models');
+      if (data && (data.data || data.object === 'list')) {
+        this.status = 'running';
+        return { status: 'running', hasChatAPI: true };
+      }
+    } catch (e) {}
+
     this.status = 'offline';
     return { status: 'offline' };
   }
 
   /**
-   * 枚举 Agent
-   * 从 Hermes 配置中读取 agents 列表
+   * 枚举 Agent（从 Hermes 配置读取）
    */
   async listAgents() {
-    const home = process.env.USERPROFILE || process.env.HOME || '~';
-    const configPath = path.join(home, 'AppData', 'Local', 'hermes', 'config.yaml');
+    this._loadHermesConfig();
 
-    try {
-      if (fs.existsSync(configPath)) {
-        const raw = fs.readFileSync(configPath, 'utf8');
-        const config = yaml.load(raw);
-        const agents = [];
-        if (config.agents && Array.isArray(config.agents)) {
-          for (const a of config.agents) {
-            agents.push({
-              id: a.id || a.name || `hermes-agent-${agents.length}`,
-              name: a.name || a.id || `Agent ${agents.length + 1}`,
-              description: a.description || '',
-            });
-          }
-        }
-        return agents;
-      }
-    } catch (e) {
-      console.warn('[HermesAdapter] listAgents config error:', e.message);
+    const agents = [];
+
+    // 从 custom_providers 读取可用模型
+    const providers = this._hermesConfig?.custom_providers || [];
+    for (const cp of providers) {
+      agents.push({
+        id: cp.model || cp.name,
+        name: cp.model || cp.name,
+        description: `Provider: ${cp.name}`,
+      });
     }
 
-    // 保底：返回默认 agent
-    return [{ id: 'hermes-default', name: 'Hermes', description: 'Default Hermes Agent' }];
+    // 添加默认模型
+    const defaultModel = this._hermesConfig?.model?.default;
+    if (defaultModel && !agents.find(a => a.id === defaultModel)) {
+      agents.unshift({
+        id: defaultModel,
+        name: defaultModel,
+        description: 'Default model',
+      });
+    }
+
+    // 至少返回一个
+    if (agents.length === 0) {
+      agents.push({ id: 'hermes-default', name: 'Hermes', description: 'Default Hermes Agent' });
+    }
+
+    return agents;
   }
 
   /**
    * 发送消息（非流式）
-   * @param {string} agentId
-   * @param {string} message
-   * @param {string} userId - 用于 X-Hermes-Session-Id
    */
-  async sendMessage(agentId, message, userId) {
+  async sendMessage(agentId, message) {
     const body = JSON.stringify({
-      model: agentId || 'hermes-default',
+      model: agentId || this._providerConfig?.model || 'hermes-default',
       messages: [{ role: 'user', content: message }],
       stream: false,
       max_tokens: 4096,
     });
 
     try {
-      const data = await this._httpPost('/v1/chat/completions', body, userId);
+      const data = await this._httpPost('/v1/chat/completions', body);
       if (data && data.choices && data.choices[0]) {
         const content = data.choices[0].message.content;
         return { success: true, content, messageId: data.id };
@@ -194,35 +279,27 @@ class HermesAdapter extends BaseAdapter {
   /**
    * 发送消息（流式 / SSE）
    */
-  sendMessageStream(agentId, message, callbacks, userId) {
+  sendMessageStream(agentId, message, callbacks) {
     const { onChunk, onDone, onError } = callbacks || {};
 
     const body = JSON.stringify({
-      model: agentId || 'hermes-default',
+      model: agentId || this._providerConfig?.model || 'hermes-default',
       messages: [{ role: 'user', content: message }],
       stream: true,
       max_tokens: 4096,
     });
 
     const url = new URL(this.baseUrl);
-    const endpoint = '/v1/chat/completions';
     const headers = {
       'Content-Type': 'application/json',
       'Content-Length': Buffer.byteLength(body),
       'Accept': 'text/event-stream',
     };
-    if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
-    }
-    // Hermes session management
-    if (userId || this._sessionId) {
-      headers['X-Hermes-Session-Id'] = userId || this._sessionId;
-    }
 
     const options = {
       hostname: url.hostname,
       port: url.port,
-      path: endpoint,
+      path: this._chatEndpoint,
       method: 'POST',
       timeout: this._requestTimeout,
       headers,
@@ -289,40 +366,27 @@ class HermesAdapter extends BaseAdapter {
     while (Date.now() - start < timeoutMs) {
       try {
         const data = await this._httpGet('/health');
-        if (data && (data.ok || data.status === 'ok' || data.status === 'running')) {
+        if (data && (data.status === 'ok' || data.ok)) {
           this.status = 'running';
           return;
         }
-      } catch (e) {
-        // 也尝试 /v1/models
-        try {
-          await this._httpGet('/v1/models');
-          this.status = 'running';
-          return;
-        } catch (e2) {}
-      }
+      } catch (e) {}
       await new Promise(r => setTimeout(r, 1000));
     }
-    throw new Error('Hermes API Server 启动超时');
+    throw new Error('Hermes Proxy 启动超时（15秒）');
   }
 
   _httpGet(p) {
     return new Promise((resolve, reject) => {
       const url = new URL(p, this.baseUrl);
-      const headers = { 'Accept': 'application/json' };
-      if (this.token) {
-        headers['Authorization'] = `Bearer ${this.token}`;
-      }
-
       const options = {
         hostname: url.hostname,
         port: url.port,
-        path: url.pathname + url.search,
+        path: url.pathname,
         method: 'GET',
         timeout: 5000,
-        headers,
+        headers: { 'Accept': 'application/json' },
       };
-
       http.get(options, (res) => {
         let data = '';
         res.on('data', c => data += c);
@@ -334,37 +398,26 @@ class HermesAdapter extends BaseAdapter {
     });
   }
 
-  _httpPost(p, bodyString, userId) {
+  _httpPost(p, bodyString) {
     return new Promise((resolve, reject) => {
       const url = new URL(p, this.baseUrl);
-      const headers = {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(bodyString),
-      };
-      if (this.token) {
-        headers['Authorization'] = `Bearer ${this.token}`;
-      }
-      if (userId || this._sessionId) {
-        headers['X-Hermes-Session-Id'] = userId || this._sessionId;
-      }
-
       const options = {
         hostname: url.hostname,
         port: url.port,
-        path: url.pathname + url.search,
+        path: url.pathname,
         method: 'POST',
         timeout: this._requestTimeout,
-        headers,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(bodyString),
+        },
       };
-
       const req = http.request(options, (res) => {
         let data = '';
         res.on('data', c => data += c);
         res.on('end', () => {
           if (res.statusCode >= 400) {
-            let msg = `${res.statusCode}`;
-            if (data && data.length < 200) msg += ` ${data}`;
-            reject(new Error(msg));
+            reject(new Error(`${res.statusCode}: ${data.substring(0, 200)}`));
             return;
           }
           try { resolve(JSON.parse(data)); }
