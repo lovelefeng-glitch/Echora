@@ -24,7 +24,7 @@ const KNOWN_AI_SOFTWARE = {
       { processName: 'hermes-agent.exe', cmdlineIncludes: null },
     ],
     configPattern: 'config.yaml',
-    apiServerPort: 8645,
+    apiServerPort: 8083,
   },
   qclaw: {
     name: 'QClaw',
@@ -457,4 +457,5 @@ const AIDetector = {
 };
 
 module.exports = AIDetector;
+
 

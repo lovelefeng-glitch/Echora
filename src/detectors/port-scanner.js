@@ -1,4 +1,4 @@
-// 端口扫描器 - 通过监听端口反推 AI 网关
+﻿// 端口扫描器 - 通过监听端口反推 AI 网关
 // 三层发现机制中的层级 2: 端口扫描 + HTTP 指纹匹配
 
 const { execSync } = require('child_process');
@@ -33,7 +33,7 @@ const GATEWAY_FINGERPRINTS = {
   hermes: {
     name: 'Hermes',
     category: 'agent',
-    knownPorts: [8645, 8642],
+    knownPorts: [8083, 8642],
     httpChecks: [
       { path: '/health', expectStatus: [200] },
       { path: '/v1/models', expectStatus: [200, 401] },
@@ -313,3 +313,4 @@ const PortScanner = {
 };
 
 module.exports = PortScanner;
+

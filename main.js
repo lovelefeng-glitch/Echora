@@ -223,7 +223,7 @@ function loadQclawConfig() {
 }
 
 // ---------- 端口查找 ----------
-const DEFAULT_PORTS = { qclaw: 28789, openclaw: 18789, hermes: 8645 };
+const DEFAULT_PORTS = { qclaw: 28789, openclaw: 18789, hermes: 8083 };
 
 function getGatewayPort(aiType) {
   const gw = gatewayManager.getAllStatus();
@@ -367,9 +367,11 @@ function setupIPC() {
 
   // === 消息通道 ===
 
-  ipcMain.handle('message:send', async (event, { aiType, agentId, text, userId }) => {
+  ipcMain.handle('message:send', async (event, { aiType, agentId, text, history, userId }) => {
     const adapter = getOrCreateAdapter(aiType || 'qclaw');
-    return adapter.sendMessage(agentId || 'main', text, userId);
+    // 如果带了 history（Hermes 等无状态 API），用 history；否则用 text（QClaw 等有状态 API）
+    const messages = history || [{ role: 'user', content: text }];
+    return adapter.sendMessage(agentId || 'main', messages, userId);
   });
 
   ipcMain.handle('message:status', async (event, aiType) => {
@@ -616,3 +618,5 @@ app.on('before-quit', () => {
     gatewayManager.shutdownAll();
   }
 });
+
+

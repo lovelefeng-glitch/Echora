@@ -1,4 +1,4 @@
-// Echora - Renderer Process v0.3.3
+﻿// Echora - Renderer Process v0.3.3
 // Agent 联系人 + 会话管理 + 抽屉菜单(九宫格) + 右侧多视图切换
 // v0.3.3: 自动检测改手动挑选 / loading 修复 / model 格式修正
 
@@ -698,7 +698,6 @@ async function sendMessage() {
   }, timeout);
 
   try {
-    // 用会话唯一的 userId 绑定 QClaw session，每个独立会话走不同窗口
     const conv = getOrCreateConv(STATE.currentAgentKey);
     const result = await window.echora.message.send(agent.aiType, agent.agentId, text, conv.userId);
     clearTimeout(safetyTimer);
@@ -1253,3 +1252,4 @@ function bindEvents() {
 
 // ========== 启动 ==========
 document.addEventListener('DOMContentLoaded', init);
+

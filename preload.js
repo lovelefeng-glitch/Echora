@@ -1,4 +1,4 @@
-// Echora - Preload Script v0.2 (安全 IPC 桥梁)
+﻿// Echora - Preload Script v0.2 (安全 IPC 桥梁)
 
 const { contextBridge, ipcRenderer } = require('electron');
 
