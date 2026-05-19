@@ -30,3 +30,6 @@ npm-debug.log*
 
 # Task artifacts (dev logs, not for public)
 task-artifact_*.md
+
+# Junk files
+]
