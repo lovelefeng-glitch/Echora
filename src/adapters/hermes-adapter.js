@@ -1,7 +1,8 @@
-﻿// Hermes 适配器 v3.0
+// Hermes 适配器 v3.1
 // 通过 Hermes Gateway API Server 对接（端口 8083）
 // Hermes 自己管理会话上下文、工具调用、记忆、技能
 // Echora 只发最新一条消息，Hermes 从 state.db 加载历史
+// v3.1: 502 截断错误自动降级为流式模式
 
 const BaseAdapter = require('./base-adapter');
 const { spawn, execSync } = require('child_process');
@@ -12,7 +13,7 @@ const yaml = require('js-yaml');
 const os = require('os');
 
 const DEFAULT_API_PORT = 8083;
-const API_KEY = 'echora-shared-secret';
+const API_KEY = '***';
 
 class HermesAdapter extends BaseAdapter {
   constructor(config = {}) {
@@ -22,11 +23,10 @@ class HermesAdapter extends BaseAdapter {
     this.baseUrl = config.baseUrl || `http://127.0.0.1:${this.apiPort}`;
     this.apiKey = config.apiKey || API_KEY;
     this._proc = null;
-    this._requestTimeout = 300000; // Hermes agent 可能执行工具，给 5 分钟
+    this._requestTimeout = 300000;
     this._hermesConfig = null;
+    this._configParams = null;
   }
-
-  // ========== 配置读取 ==========
 
   _loadHermesConfig() {
     if (this._hermesConfig) return true;
@@ -35,6 +35,10 @@ class HermesAdapter extends BaseAdapter {
     if (!fs.existsSync(configPath)) return false;
     try {
       this._hermesConfig = yaml.load(fs.readFileSync(configPath, 'utf8'));
+      this._configParams = {
+        gatewayTimeout: ((this._hermesConfig?.agent?.gateway_timeout) || 1800) * 1000,
+        maxTurns: (this._hermesConfig?.agent?.max_turns) || 90,
+      };
       return true;
     } catch (e) {
       console.warn('[HermesAdapter] config.yaml 读取失败:', e.message);
@@ -53,18 +57,14 @@ class HermesAdapter extends BaseAdapter {
     return null;
   }
 
-  // ========== 生命周期 ==========
-
   async start() {
     const alive = await this.getStatus();
     if (alive.status === 'running') return { success: true, message: 'Hermes API Server 已在运行' };
 
     this._loadHermesConfig();
-
     const hermesExe = this._getHermesExe();
     if (!hermesExe) return { success: false, message: '未找到 Hermes 可执行文件' };
 
-    // 启动 hermes gateway run（会自动开启 API Server）
     const args = ['gateway', 'run', '--replace'];
     this._proc = spawn(hermesExe, args, {
       detached: true,
@@ -74,6 +74,8 @@ class HermesAdapter extends BaseAdapter {
     this._proc.stderr?.on('data', d => console.warn('[Hermes]', d.toString().trim()));
 
     this.status = 'starting';
+    if (this._configParams) this._requestTimeout = this._configParams.gatewayTimeout;
+
     try {
       await this._waitForReady(30000);
       return { success: true, message: 'Hermes API Server 启动成功' };
@@ -108,15 +110,9 @@ class HermesAdapter extends BaseAdapter {
     return { status: 'offline' };
   }
 
-  // ========== Agent 列表 ==========
-
   async listAgents() {
-    // Hermes agent 是统一的，通过 model 字段选择
-    // 但可以列出 Hermes 已配置的 profile
     this._loadHermesConfig();
     const agents = [{ id: 'hermes-agent', name: 'Hermes Agent', description: '完整 Hermes agent（工具/记忆/技能）' }];
-
-    // 如果有 profiles，也列出来
     try {
       const hermesRoot = this.config.hermesRoot || path.join(os.homedir(), 'AppData', 'Local', 'hermes');
       const profilesDir = path.join(hermesRoot, 'profiles');
@@ -127,14 +123,12 @@ class HermesAdapter extends BaseAdapter {
         }
       }
     } catch (e) {}
-
     return agents;
   }
 
-  // ========== 消息发送（核心：只发最新消息，Hermes 管理历史） ==========
+  // ========== 消息发送（502 自动降级流式） ==========
 
   async sendMessage(agentId, messages, userId) {
-    // messages 可能是数组（从 main.js 传来）或字符串（兼容旧调用）
     let latestMessage;
     if (Array.isArray(messages)) {
       latestMessage = messages[messages.length - 1]?.content || '';
@@ -142,7 +136,6 @@ class HermesAdapter extends BaseAdapter {
       latestMessage = messages || '';
     }
 
-    // 确定 model（agentId 可能是 profile 名）
     const model = agentId && agentId !== 'main' && agentId !== 'hermes-agent'
       ? agentId.replace('hermes-', '')
       : 'hermes-agent';
@@ -159,26 +152,87 @@ class HermesAdapter extends BaseAdapter {
       'Content-Length': Buffer.byteLength(body),
       'Authorization': `Bearer ${this.apiKey}`,
     };
-    // 会话 ID：通过 X-Hermes-Session-Id 头关联会话
-    if (userId) {
-      headers['X-Hermes-Session-Id'] = userId;
-    }
+    if (userId) headers['X-Hermes-Session-Id'] = userId;
 
     try {
       const data = await this._httpPost('/v1/chat/completions', body, headers);
       if (data?.choices?.[0]) {
-        // 从响应头获取 session ID（首次请求会返回）
-        return {
-          success: true,
-          content: data.choices[0].message.content,
-          messageId: data.id,
-          sessionId: data._sessionId || userId,
-        };
+        return { success: true, content: data.choices[0].message.content, messageId: data.id, sessionId: data._sessionId || userId };
       }
       return { success: false, message: '无效响应格式' };
     } catch (e) {
+      // 502 截断错误：降级为流式模式重试
+      if (e.message && e.message.includes('502')) {
+        console.log('[HermesAdapter] 非流式 502，降级为流式重试');
+        return this._sendViaStream(model, latestMessage, userId);
+      }
       return { success: false, message: e.message };
     }
+  }
+
+  // 流式降级：用 sendMessageStream 收集完整内容
+  _sendViaStream(model, message, userId) {
+    return new Promise((resolve) => {
+      const body = JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: message }],
+        stream: true,
+        max_tokens: 16384,
+      });
+
+      const url = new URL(this.baseUrl);
+      const headers = {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        'Accept': 'text/event-stream',
+        'Authorization': `Bearer ${this.apiKey}`,
+      };
+      if (userId) headers['X-Hermes-Session-Id'] = userId;
+
+      const options = {
+        hostname: url.hostname, port: url.port, path: '/v1/chat/completions',
+        method: 'POST', timeout: this._requestTimeout, headers,
+      };
+
+      let fullContent = '';
+      let returnedSessionId = null;
+
+      const req = http.request(options, (res) => {
+        returnedSessionId = res.headers['x-hermes-session-id'] || null;
+
+        if (res.statusCode >= 400) {
+          let errBody = '';
+          res.on('data', c => errBody += c);
+          res.on('end', () => resolve({ success: false, message: `${res.statusCode}: ${errBody.substring(0, 200)}` }));
+          return;
+        }
+
+        let buffer = '';
+        res.on('data', (chunk) => {
+          buffer += chunk.toString();
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ')) continue;
+            const payload = trimmed.slice(6).trim();
+            if (payload === '[DONE]') {
+              resolve({ success: true, content: fullContent, sessionId: returnedSessionId });
+              return;
+            }
+            try {
+              const parsed = JSON.parse(payload);
+              const delta = parsed.choices?.[0]?.delta?.content || '';
+              if (delta) fullContent += delta;
+            } catch (e) {}
+          }
+        });
+        res.on('end', () => resolve({ success: true, content: fullContent, sessionId: returnedSessionId }));
+      });
+      req.setTimeout(this._requestTimeout, () => { req.destroy(); resolve({ success: false, message: '流式请求超时' }); });
+      req.on('error', (err) => resolve({ success: false, message: err.message }));
+      req.end(body);
+    });
   }
 
   sendMessageStream(agentId, messages, callbacks, userId) {
@@ -209,9 +263,7 @@ class HermesAdapter extends BaseAdapter {
       'Accept': 'text/event-stream',
       'Authorization': `Bearer ${this.apiKey}`,
     };
-    if (userId) {
-      headers['X-Hermes-Session-Id'] = userId;
-    }
+    if (userId) headers['X-Hermes-Session-Id'] = userId;
 
     const options = {
       hostname: url.hostname, port: url.port, path: '/v1/chat/completions',
@@ -222,7 +274,6 @@ class HermesAdapter extends BaseAdapter {
     let returnedSessionId = null;
 
     const req = http.request(options, (res) => {
-      // 捕获返回的 session ID
       returnedSessionId = res.headers['x-hermes-session-id'] || null;
 
       if (res.statusCode >= 400) {
@@ -261,7 +312,7 @@ class HermesAdapter extends BaseAdapter {
         this._emitMessage({ agentId, role: 'assistant', content: fullContent, done: true, sessionId: returnedSessionId });
       });
     });
-    req.setTimeout(this._requestTimeout, () => { req.destroy(); if (onError) onError(new Error('请求超时（5分钟）')); });
+    req.setTimeout(this._requestTimeout, () => { req.destroy(); if (onError) onError(new Error('请求超时')); });
     req.on('error', (err) => { if (onError) onError(err); });
     req.end(body);
     return req;
@@ -281,7 +332,7 @@ class HermesAdapter extends BaseAdapter {
       } catch (e) {}
       await new Promise(r => setTimeout(r, 2000));
     }
-    throw new Error('Hermes API Server 启动超时（30秒）');
+    throw new Error('Hermes API Server 启动超时');
   }
 
   _httpGet(p) {
@@ -322,7 +373,3 @@ class HermesAdapter extends BaseAdapter {
 }
 
 module.exports = HermesAdapter;
-
-
-
-
