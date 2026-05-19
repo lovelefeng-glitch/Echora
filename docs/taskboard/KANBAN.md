@@ -1,6 +1,6 @@
-# 任务看板
+﻿# 任务看板
 
-> **最后更新**: 2026-05-19  
+> **最后更新**: 2026-05-20  
 > **活跃开发者**: 小雪 (xue)
 
 ---
@@ -73,8 +73,9 @@
 | P3-3 | AI 进程性能监控面板（CPU/内存/网络 + 历史趋势图）| ui + detectors | 📅 |
 | P3-4 | 跨 AI 上下文传递 | adapters + manager | 📅 |
 | P3-5 | macOS/Linux 全面适配测试 | all | 📅 |
-| P3-6 | Hermes gateway 从 Echora 启动/停止（`hermes gateway run --platform api_server`） | gateway-manager | 📅 |
+| P3-6 | Hermes gateway 从 Echora 启动/停止（hermes gateway run --replace） | adapters | ✅ |
 | P3-7 | Hermes profile 切换（`hermes -p minmin gateway run`） | adapters | 📅 |
+| P3-8 | [F-4] Hermes Gateway API Server 集成（端口 8083 + 会话管理 + 502降级） | adapters | ✅ |
 
 ---
 
@@ -103,7 +104,7 @@
 | # | 阻塞项 | 阻塞原因 | 依赖 |
 |---|--------|----------|------|
 | B-1 | ~~OpenClaw/QClaw Gateway API 路径~~ | ~~`/api/status` 返回 404~~ | ✅ 已解决：端点确认为 `/health` + `/v1/chat/completions` |
-| B-2 | Hermes HTTP API（`/v1/chat/completions`）| Hermes proxy 当前只支持 nous/xai OAuth，不支持自定义 provider | 等待 Hermes 实现 StaticAdapter（~30行代码）|
+| B-2 | ~~Hermes HTTP API~~ | ~~proxy 不支持自定义 provider~~ | ✅ 已解决：改用 Gateway API Server (端口 8083) |
 
 ---
 
@@ -162,4 +163,8 @@ S-1 port-scanner → S-2 state-reader → S-3 AIDetector集成 → S-4 IPC+弹�
 | 2026-05-19 | Sprint 3 [F-1] 全部完成: P1-8~P1-11 (config-reader/IPC/CSS/renderer超时接入/5文件验证0错误) | AI |
 | 2026-05-19 | [F-2] Hermes Agent 后端+UI 完成: P1-12~P1-15 (hermes-adapter/js-yaml/Settings专区/全部语法通过) | AI |
 | 2026-05-19 | 接力交接: 小雪接手开发，commit `4d1077d`，交接记录 `task-artifact_2026-05-19_handoff-to-xue.md` | 小雪 |
+| 2026-05-19 | Sprint 4 [F-3] AI 网关自动发现: port-scanner/state-reader/AIDetector三层集成/IPC+弹窗UI/动态注册，6文件新建+修改，全部语法通过 | 小雪 |
+| 2026-05-19~20 | [F-4] Hermes Gateway API Server 集成完整交付（adapter v1→v2→v3 三次重写） | 小雪 |
+| 2026-05-20 | 修复: 502截断降级流式/API Key/--replace/timeout从config读取 | 小雪 |
+| 2026-05-20 | .env: API_SERVER_ENABLED + API_SERVER_KEY + GATEWAY_ALLOW_ALL_USERS | 小雪 |
 | 2026-05-19 | Sprint 4 [F-3] AI 网关自动发现: port-scanner/state-reader/AIDetector三层集成/IPC+弹窗UI/动态注册，6文件新建+修改，全部语法通过 | 小雪 |

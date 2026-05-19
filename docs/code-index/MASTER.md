@@ -19,8 +19,9 @@
 | 环境检查器 | src/detectors/env-checker.js | [env-checker.md](env-checker.md) | ~170 | ✅ |\n| 端口扫描器 | src/detectors/port-scanner.js | [port-scanner.md](port-scanner.md) | ~220 | ✅ 新增 F-3 |\n| 状态读取器 | src/detectors/state-reader.js | [state-reader.md](state-reader.md) | ~170 | ✅ 新增 F-3 |
 | 网关管理器 | `src/manager/gateway-manager.js` | [gateway-manager.md](gateway-manager.md) | ~160 | ✅ |
 | 配置管理器 | `src/manager/config-manager.js` | [config-manager.md](config-manager.md) | ~80 | ✅ |
-| 适配器基类 | `src/adapters/base-adapter.js` | [adapters.md](adapters.md) | ~72 | ✅ |
-| OpenClaw 适配器 | `src/adapters/openclaw-adapter.js` | [adapters.md](adapters.md) | ~120 | ⚠️ Bug |
+| 适配器基类 | `src/adapters/base-adapter.js` | [adapters.md](adapters.md) |
+| Hermes 适配器 | src/adapters/hermes-adapter.js | [adapters.md](adapters.md) | ~300 | ✅ v3.0 Gateway API | ~72 | ✅ |
+| OpenClaw 适配器 | src/adapters/openclaw-adapter.js | [adapters.md](adapters.md) | ~150 | ✅ | ⚠️ Bug |
 
 ---
 
@@ -69,3 +70,4 @@
 | `runStartupChecks()` | 启动四步流程 |
 | `safeSend(channel, data)` | 安全推送（窗口可能已销毁） |
 | `createWindow()` | Electron BrowserWindow 创建 |
+
