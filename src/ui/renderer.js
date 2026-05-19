@@ -334,6 +334,82 @@ function renderScanResults(detected) {
   });
 }
 
+// ========== 三层完整扫描（端口反推 + 状态文件） ==========
+async function doScanFull() {
+  const btn = document.getElementById('btn-mgmt-detect');
+  if (btn) { btn.textContent = '?? 深度扫描中...'; btn.disabled = true; }
+
+  try {
+    const { results, unknownGateways } = await window.echora.ai.scanFull();
+    switchView('ai-mgmt');
+    renderScanResults(results);
+
+    // 如果发现未知网关，弹出提示
+    if (unknownGateways && unknownGateways.length > 0) {
+      renderUnknownGateways(unknownGateways);
+    }
+  } catch (e) {
+    alert('深度扫描失败: ' + e.message);
+  }
+  if (btn) { btn.textContent = '?? 自动检测'; btn.disabled = false; }
+}
+
+function renderUnknownGateways(unknowns) {
+  const c = document.getElementById('mgmt-ai-list'); if (!c) return;
+
+  const section = document.createElement('div');
+  section.className = 'unknown-gateways-section';
+  section.innerHTML = `<div style="padding:12px 0;color:var(--accent);font-size:13px;font-weight:600;">?? 发现 ${unknowns.length} 个未知网关</div>`;
+
+  for (const gw of unknowns) {
+    const row = document.createElement('div');
+    row.className = 'mgmt-ai-item scan-result unknown-gw';
+    row.innerHTML = `
+      <span class="mgmt-ai-icon">??</span>
+      <div class="mgmt-ai-info">
+        <div class="mgmt-ai-name">未知网关 · 端口 ${gw.port}</div>
+        <div class="mgmt-ai-path">进程: ${gw.processName} (PID: ${gw.pid}) · 匹配: ${gw.confidence}</div>
+        <div class="mgmt-ai-path" style="font-size:11px;color:var(--text-hint);">响应: HTTP ${gw.probeStatus} · ${gw.probeBodySnippet.substring(0, 80)}...</div>
+      </div>
+      <div class="mgmt-ai-actions" style="display:flex;gap:6px;">
+        <button class="btn btn-secondary btn-gw-detail" data-gw-port="${gw.port}" style="font-size:11px;padding:3px 8px;">?? 详情</button>
+        <button class="btn btn-primary btn-gw-add" data-gw-port="${gw.port}" data-gw-name="${gw.name}" data-gw-type="${gw.aiType}" style="font-size:11px;padding:3px 10px;">+ 添加</button>
+      </div>`;
+    section.appendChild(row);
+  }
+  c.appendChild(section);
+
+  // 绑定事件
+  section.querySelectorAll('.btn-gw-detail').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const port = parseInt(btn.dataset.gwPort);
+      const detail = await window.echora.ai.probePort(port);
+      const info = detail.processes.map(p => `${p.name} (PID: ${p.pid})`).join(', ');
+      const httpInfo = detail.httpResponses.map(r => `  ${r.path}: HTTP ${r.status} (${r.contentType})`).join('\n');
+      alert(`端口 ${port} 详情:\n\n进程: ${info}\n\nHTTP 响应:\n${httpInfo}`);
+    });
+  });
+
+  section.querySelectorAll('.btn-gw-add').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const port = parseInt(btn.dataset.gwPort);
+      const name = btn.dataset.gwName;
+      const aiType = btn.dataset.gwType || `custom-${port}`;
+      const confirmed = confirm(`确认添加 "${name}" (端口 ${port}) 为新的 AI 软件？`);
+      if (confirmed) {
+        await window.echora.ai.addDiscovered({ aiType, name, port });
+        btn.textContent = '? 已添加'; btn.disabled = true;
+        setTimeout(async () => {
+          const re = await window.echora.gateway.refresh();
+          if (re?.detected) { STATE.aiList = objectToList(re.detected); }
+          await loadAllAgents();
+          renderAIDetect(STATE.aiList);
+        }, 300);
+      }
+    });
+  });
+}
+
 // ========== Agent 管理 ==========
 async function loadAllAgents() {
   const allAgents = [];
@@ -1086,7 +1162,7 @@ function bindEvents() {
 
   // 自动检测按钮
   document.getElementById('btn-mgmt-add').addEventListener('click', () => showAddAIModal());
-  document.getElementById('btn-mgmt-detect').addEventListener('click', () => doAutoDetect());
+  document.getElementById('btn-mgmt-detect').addEventListener('click', () => doScanFull());
 
   // 事件委托：AI管理列表按钮 + 聊天区启动按钮
   const mgmtList = document.getElementById('mgmt-ai-list');

@@ -78,6 +78,9 @@ contextBridge.exposeInMainWorld('echora', {
     removePath: (aiType) => ipcRenderer.invoke('ai:removePath', aiType),
     rescan: () => ipcRenderer.invoke('ai:rescan'),
     scan: () => ipcRenderer.invoke('ai:scan'),
+    scanFull: () => ipcRenderer.invoke('ai:scanFull'),
+    probePort: (port) => ipcRenderer.invoke('ai:probePort', port),
+    addDiscovered: (data) => ipcRenderer.invoke('ai:addDiscovered', data),
   },
 
   // ===== 环境检查 =====

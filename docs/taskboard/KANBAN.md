@@ -1,7 +1,7 @@
 # 任务看板
 
 > **最后更新**: 2026-05-19  
-> **活跃开发者**: ohfen
+> **活跃开发者**: 小雪 (xue)
 
 ---
 
@@ -47,6 +47,11 @@
 | P1-13 | `[F-2]` config-reader 扩展 YAML 解析 + profiles/*/config.yaml 映射 | manager | ✅ |
 | P1-14 | `[F-2]` 新建 hermes-adapter.js（/v1/chat/completions + X-Hermes-Session-Id） | adapters | ✅ |
 | P1-15 | `[F-2]` Settings 视图展示 Hermes 主配置 + profiles 列表 | ui | ✅ |
+| P1-16 | `[F-3]` 新增 port-scanner.js（端口扫描 + HTTP 探测 + 指纹匹配）| detectors | ✅ |
+| P1-17 | `[F-3]` 新增 state-reader.js（网关状态文件读取）| detectors | ✅ |
+| P1-18 | `[F-3]` 扩展 AIDetector 集成层级 2+3 发现机制 | detectors | ✅ |
+| P1-19 | `[F-3]` 新增 IPC ai:scanFull/probePort/addDiscovered + renderer 弹窗 UI | main + ui | ✅ |
+| P1-20 | `[F-3]` config-manager 动态添加新 AI 类型 + registerType | manager + detectors | ✅ |
 
 ### 优先级 P2 — 体验优化
 
@@ -130,6 +135,19 @@ P1-3 (Agent选择) → P2-1 (系统托盘) → P2-3 (状态轮询) → P3-1 (Cur
 
 ---
 
+## 当前 Sprint (Sprint 4: 2026-05-19 ~ 05-21)
+
+**目标**: AI 网关自动发现 + 新软件提示添加
+
+**计划**:
+```
+S-1 port-scanner → S-2 state-reader → S-3 AIDetector集成 → S-4 IPC+弹窗 → S-5 config动态添加 → S-6 文档+验证
+```
+
+**任务**: P1-16, P1-17, P1-18, P1-19, P1-20
+
+---
+
 ## 变更记录
 
 | 日期 | 变更 | 作者 |
@@ -142,3 +160,5 @@ P1-3 (Agent选择) → P2-1 (系统托盘) → P2-3 (状态轮询) → P3-1 (Cur
 | 2026-05-19 | KANBAN 合并: P2-4+P3-3 → 统一性能监控面板；P1-8~11 标 `[F-1]` | AI |
 | 2026-05-19 | Sprint 3 [F-1] 全部完成: P1-8~P1-11 (config-reader/IPC/CSS/renderer超时接入/5文件验证0错误) | AI |
 | 2026-05-19 | [F-2] Hermes Agent 后端+UI 完成: P1-12~P1-15 (hermes-adapter/js-yaml/Settings专区/全部语法通过) | AI |
+| 2026-05-19 | 接力交接: 小雪接手开发，commit `4d1077d`，交接记录 `task-artifact_2026-05-19_handoff-to-xue.md` | 小雪 |
+| 2026-05-19 | Sprint 4 [F-3] AI 网关自动发现: port-scanner/state-reader/AIDetector三层集成/IPC+弹窗UI/动态注册，6文件新建+修改，全部语法通过 | 小雪 |

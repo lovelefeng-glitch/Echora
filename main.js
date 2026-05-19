@@ -415,6 +415,28 @@ function setupIPC() {
     return EnvChecker.checkAll();
   });
 
+  // === 三层完整扫描（进程名 + 端口反推 + 状态文件） ===
+  ipcMain.handle('ai:scanFull', async () => {
+    const paths = configManager.get('aiPaths') || {};
+    return AIDetector.scanFull(paths);
+  });
+
+  // === 探测单个端口详情 ===
+  ipcMain.handle('ai:probePort', async (event, port) => {
+    return AIDetector.probePort(port);
+  });
+
+  // === 添加发现的新 AI 类型 ===
+  ipcMain.handle('ai:addDiscovered', async (event, { aiType, name, port, exePath }) => {
+    if (exePath) {
+      configManager.set('aiPaths', { ...configManager.get('aiPaths'), [aiType]: exePath });
+    }
+    if (port) {
+      configManager.set('gatewayConfigs', { ...configManager.get('gatewayConfigs'), [aiType]: { port } });
+    }
+    return { success: true };
+  });
+
   ipcMain.handle('env:install', async (event, tool) => {
     return EnvChecker.install(tool);
   });

@@ -1,4 +1,4 @@
-# 代码索引 · 总览
+﻿# 代码索引 · 总览
 
 > **⚠️ 开发前的强制步骤**  
 > 1. 先读本文档找到相关模块  
@@ -15,8 +15,8 @@
 | 主进程 | `main.js` | [→](#mainjs) | ~140 | ✅ |
 | 预加载 | `preload.js` | [preload.md](preload.md) | ~85 | ✅ |
 | 渲染进程 | `src/ui/renderer.js` | [renderer.md](renderer.md) | ~430 | ✅ |
-| AI 检测器 | `src/detectors/ai-detector.js` | [ai-detector.md](ai-detector.md) | ~210 | ✅ |
-| 环境检查器 | `src/detectors/env-checker.js` | [env-checker.md](env-checker.md) | ~170 | ✅ |
+| AI 检测器 | `src/detectors/ai-detector.js` | [ai-detector.md](ai-detector.md) | ~350 | ✅ v0.3 三层发现 |
+| 环境检查器 | src/detectors/env-checker.js | [env-checker.md](env-checker.md) | ~170 | ✅ |\n| 端口扫描器 | src/detectors/port-scanner.js | [port-scanner.md](port-scanner.md) | ~220 | ✅ 新增 F-3 |\n| 状态读取器 | src/detectors/state-reader.js | [state-reader.md](state-reader.md) | ~170 | ✅ 新增 F-3 |
 | 网关管理器 | `src/manager/gateway-manager.js` | [gateway-manager.md](gateway-manager.md) | ~160 | ✅ |
 | 配置管理器 | `src/manager/config-manager.js` | [config-manager.md](config-manager.md) | ~80 | ✅ |
 | 适配器基类 | `src/adapters/base-adapter.js` | [adapters.md](adapters.md) | ~72 | ✅ |

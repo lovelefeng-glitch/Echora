@@ -1,6 +1,8 @@
-// AI 软件自动检测器 v0.2
-// 扫描文件 + 检测运行中的网关进程 + 端口识别
+// AI 软件自动检测器 v0.3
+// 三层发现机制: 进程名扫描 + 端口反推 + 状态文件读取
 
+const PortScanner = require('./port-scanner');
+const StateReader = require('./state-reader');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -21,8 +23,8 @@ const KNOWN_AI_SOFTWARE = {
       { processName: 'hermes.exe', cmdlineIncludes: null },
       { processName: 'hermes-agent.exe', cmdlineIncludes: null },
     ],
-    configPattern: 'config.yaml', // YAML 配置
-    apiServerPort: 8642, // Hermes API server 默认端口
+    configPattern: 'config.yaml',
+    apiServerPort: 8642,
   },
   qclaw: {
     name: 'QClaw',
@@ -45,7 +47,6 @@ const KNOWN_AI_SOFTWARE = {
       path.join(os.homedir(), 'AppData', 'Roaming', 'npm'),
       'C:\\Program Files\\OpenClaw',
     ],
-    // npm全局包检测
     npmPackage: 'openclaw',
     gatewayPatterns: [
       { processName: 'node.exe', cmdlineIncludes: 'openclaw' },
@@ -99,7 +100,7 @@ const KNOWN_AI_SOFTWARE = {
  * 从 netstat 输出解析 PID -> 端口列表
  */
 function parseNetstat() {
-  const portMap = new Map(); // pid -> [ports]
+  const portMap = new Map();
   let raw;
   try {
     raw = execSync('netstat -ano', { encoding: 'utf-8', timeout: 5000 });
@@ -108,7 +109,6 @@ function parseNetstat() {
   }
 
   for (const line of raw.split('\n')) {
-    // 匹配 TCP    127.0.0.1:28789  0.0.0.0:0  LISTENING  <pid>
     const m = line.match(/TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)/i);
     if (m) {
       const port = parseInt(m[1]);
@@ -126,7 +126,6 @@ function parseNetstat() {
 function getProcesses() {
   let raw;
   try {
-    // PowerShell：只获取我们需要的字段
     raw = execSync(
       'powershell -NoProfile -Command "Get-CimInstance Win32_Process | Select-Object ProcessId,Name,CommandLine | ConvertTo-Json -Compress"',
       { encoding: 'utf-8', timeout: 10000, maxBuffer: 10 * 1024 * 1024 }
@@ -148,7 +147,7 @@ function getProcesses() {
 // ========== 主检测器 ==========
 const AIDetector = {
   /**
-   * 完整扫描：文件 + 运行中网关
+   * 完整扫描：文件 + 运行中网关（层级 1）
    */
   async scanAll(existingPaths = {}) {
     const fileResults = this.scanFiles(existingPaths);
@@ -229,7 +228,6 @@ const AIDetector = {
             const deps = parsed.dependencies || {};
             if (deps[def.npmPackage]) {
               const ver = deps[def.npmPackage].version;
-              // 定位 npm 全局根目录
               const npmRoot = execSync('npm root -g', { encoding: 'utf-8', timeout: 3000 }).trim();
               const pkgPath = path.join(npmRoot, def.npmPackage);
               const cliPath = fs.existsSync(path.join(pkgPath, 'bin', 'openclaw.js'))
@@ -255,7 +253,7 @@ const AIDetector = {
   },
 
   /**
-   * 🔍 扫描运行中的网关进程
+   * 扫描运行中的网关进程
    */
   async scanGateways() {
     const results = {};
@@ -293,9 +291,7 @@ const AIDetector = {
       // 去重：按端口+进程名去重，选择第一个健康的
       let selected = null;
       for (const cand of candidates) {
-        // 跳过没有端口的
         if (!cand.port) continue;
-        // 检查是否已存在（same port）
         const dup = Object.values(results).find(r => r.port === cand.port);
         if (dup) continue;
 
@@ -306,7 +302,6 @@ const AIDetector = {
         }
       }
 
-      // 如果没找到 verify 过的，取第一个有端口的
       if (!selected && candidates.length > 0) {
         for (const cand of candidates) {
           if (!cand.port) continue;
@@ -348,13 +343,116 @@ const AIDetector = {
           if (!resolved) { resolved = true; resolve(res.statusCode >= 200 && res.statusCode < 500); }
         });
         req.on('error', () => {
-          // 试下一个路径
           setTimeout(() => tryPath(idx + 1), 50);
         });
         req.on('timeout', () => { req.destroy(); tryPath(idx + 1); });
       };
       tryPath(0);
     });
+  },
+
+  // ========== 层级 2: 端口扫描发现 ==========
+  /**
+   * 端口扫描: 通过监听端口反推未知 AI 网关
+   */
+  async scanByPorts(ignorePorts = []) {
+    return PortScanner.scan(ignorePorts);
+  },
+
+  // ========== 层级 3: 状态文件发现 ==========
+  /**
+   * 状态文件扫描: 读取已知 AI 的 gateway_state.json 等
+   */
+  scanByStateFiles() {
+    return StateReader.readAll();
+  },
+
+  /**
+   * 完整三层扫描: 进程名 + 端口反推 + 状态文件
+   */
+  async scanFull(existingPaths = {}, options = {}) {
+    // 层级 1: 已有扫描
+    const results = await this.scanAll(existingPaths);
+
+    // 层级 2: 端口扫描
+    const knownPorts = PortScanner.getKnownPorts();
+    const portDiscovered = await this.scanByPorts([...knownPorts, ...(options.ignorePorts || [])]);
+
+    // 层级 3: 状态文件
+    const stateResults = this.scanByStateFiles();
+
+    // 合并: 状态文件可以补充/确认层级 1 的结果
+    for (const [aiType, stateInfo] of Object.entries(stateResults)) {
+      if (stateInfo && stateInfo.found) {
+        if (!results[aiType]) {
+          results[aiType] = {
+            name: stateInfo.name,
+            category: 'agent',
+            found: true,
+            path: null,
+            source: 'state-file',
+            verified: false,
+            gateway: null,
+          };
+        }
+        if (stateInfo.running && (!results[aiType].gateway || !results[aiType].gateway.running)) {
+          results[aiType].gateway = {
+            running: true,
+            pid: stateInfo.pid,
+            port: null,
+            url: null,
+            alive: true,
+            source: 'state-file',
+          };
+          results[aiType].found = true;
+        }
+      }
+    }
+
+    // 端口扫描: 找到的未知网关
+    const unknownGateways = portDiscovered.filter(
+      d => !results[d.aiType] || !results[d.aiType].found
+    );
+
+    return { results, unknownGateways, portDiscovered };
+  },
+
+  /**
+   * 探测单个端口详情（用于用户查看未知网关）
+   */
+  async probePort(port) {
+    return PortScanner.probePort(port);
+  },
+
+  /**
+   * 动态注册新的 AI 类型（用于用户添加发现的新 AI）
+   * @param {string} aiType - 类型键名
+   * @param {object} definition - { name, category, knownPorts, httpChecks, ... }
+   */
+  registerType(aiType, definition) {
+    // 添加到内存中的指纹库
+    if (!KNOWN_AI_SOFTWARE[aiType]) {
+      KNOWN_AI_SOFTWARE[aiType] = {
+        name: definition.name || aiType,
+        category: definition.category || 'agent',
+        exeNames: definition.exeNames || [],
+        searchPaths: definition.searchPaths || [],
+        gatewayPatterns: definition.gatewayPatterns || [],
+        configPattern: definition.configPattern || null,
+        apiServerPort: definition.apiServerPort || null,
+      };
+    }
+    // 同时注册到 PortScanner 指纹库
+    if (definition.knownPorts) {
+      PortScanner.registerFingerprint(aiType, {
+        name: definition.name,
+        category: definition.category,
+        knownPorts: definition.knownPorts,
+        httpChecks: definition.httpChecks || [{ path: '/', expectStatus: [200, 404] }],
+        responsePatterns: definition.responsePatterns || [],
+        processHints: definition.processHints || [],
+      });
+    }
   },
 };
 
