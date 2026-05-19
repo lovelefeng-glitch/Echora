@@ -12,7 +12,9 @@ const AIDetector = require('./src/detectors/ai-detector');
 const GatewayManager = require('./src/manager/gateway-manager');
 const ConfigManager = require('./src/manager/config-manager');
 const OpenClawAdapter = require('./src/adapters/openclaw-adapter');
+const HermesAdapter = require('./src/adapters/hermes-adapter');
 const CursorAdapter = require('./src/adapters/cursor-adapter');
+const ConfigReader = require('./src/manager/config-reader');
 const { createAPIServer } = require('./src/api-server');
 
 // ---------- 全局状态 ----------
@@ -221,7 +223,7 @@ function loadQclawConfig() {
 }
 
 // ---------- 端口查找 ----------
-const DEFAULT_PORTS = { qclaw: 28789, openclaw: 18789 };
+const DEFAULT_PORTS = { qclaw: 28789, openclaw: 18789, hermes: 8642 };
 
 function getGatewayPort(aiType) {
   const gw = gatewayManager.getAllStatus();
@@ -250,6 +252,12 @@ function getOrCreateAdapter(aiType, port) {
   let adapter;
   if (aiType === 'cursor') {
     adapter = new CursorAdapter({ aiType: 'cursor' });
+  } else if (aiType === 'hermes') {
+    adapter = new HermesAdapter({
+      port: finalPort,
+      token: process.env.API_SERVER_KEY || '',
+      baseUrl,
+    });
   } else {
     adapter = new OpenClawAdapter({
       aiType,
@@ -435,12 +443,114 @@ function setupIPC() {
     const result = await dialog.showOpenDialog(mainWindow, opts);
     return result;
   });
+
+  // === AI 配置文件管理（只读） ===
+
+  ipcMain.handle('ai-config:set-path', async (event, aiType, filePath) => {
+    const paths = configManager.get('aiConfigPaths') || {};
+    paths[aiType] = filePath;
+    configManager.set('aiConfigPaths', paths);
+    return true;
+  });
+
+  ipcMain.handle('ai-config:read', async (event, aiType) => {
+    const paths = configManager.get('aiConfigPaths') || {};
+    const filePath = paths[aiType];
+    if (!filePath) return { success: false, error: `未注册 ${aiType} 的配置路径` };
+    const result = ConfigReader.read(filePath);
+    if (result.success) {
+      result.data = ConfigReader.normalize(aiType, result.data);
+    }
+    return result;
+  });
+
+  ipcMain.handle('ai-config:discover', async () => {
+    return ConfigReader.discover();
+  });
+
+  // === Hermes 专用 ===
+
+  ipcMain.handle('hermes:profiles', async () => {
+    return ConfigReader.discoverHermesProfiles();
+  });
+
+  ipcMain.handle('hermes:config', async () => {
+    const paths = ConfigReader.discover();
+    if (!paths.hermes) return { success: false, error: 'Hermes 配置文件未找到' };
+    const result = ConfigReader.read(paths.hermes);
+    if (result.success) {
+      result.data = ConfigReader.normalize('hermes', result.data);
+    }
+    return result;
+  });
+
+  // === AI 配置列表 ===
+
+  ipcMain.handle('ai-config:list', async () => {
+    const paths = configManager.get('aiConfigPaths') || {};
+    const list = {};
+    for (const [aiType, filePath] of Object.entries(paths)) {
+      const result = ConfigReader.read(filePath);
+      list[aiType] = {
+        path: filePath,
+        status: result.success ? 'ok' : 'error',
+        preview: result.success ? ConfigReader.normalize(aiType, result.data) : null,
+        error: result.error || null,
+      };
+    }
+    return list;
+  });
 }
 
 // ---------- 应用生命周期 ----------
-app.whenReady().then(() => {
+
+/** 检测端口是否被旧 Echora 实例占用，弹窗询问是否关闭 */
+function checkPortConflict(port) {
+  return new Promise((resolve) => {
+    exec(`netstat -ano | findstr :${port} | findstr LISTENING`, { timeout: 3000 }, (err, stdout) => {
+      if (err || !stdout || !stdout.trim()) {
+        // 端口空闲
+        return resolve(false);
+      }
+
+      // 提取 PID
+      const m = stdout.trim().split(/\r?\n/)[0].match(/(\d+)$/);
+      const pid = m ? m[1] : '?';
+
+      dialog.showMessageBox({
+        type: 'warning',
+        title: 'Echora - 端口冲突',
+        message: '检测到 Echora 已在运行',
+        detail: `端口 ${port} 已被占用 (PID ${pid})。\n\n点击「关闭旧进程」将终止旧实例并重新启动。\n点击「取消」则退出本次启动。`,
+        buttons: ['关闭旧进程', '取消'],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true,
+      }).then(({ response }) => {
+        if (response === 0) {
+          exec(`taskkill /pid ${pid} /T /F`, (killErr) => {
+            if (killErr) {
+              console.warn(`[Echora] taskkill 失败:`, killErr.message);
+            }
+            // 等待端口释放
+            setTimeout(() => resolve(true), 2000);
+          });
+        } else {
+          app.quit();
+          resolve(false);
+        }
+      });
+    });
+  });
+}
+
+app.whenReady().then(async () => {
   ConfigManager.init(path.join(app.getPath('userData'), 'echora-config.json'));
   configManager = ConfigManager;
+
+  // 🔒 端口冲突检测：避免多开
+  await checkPortConflict(18790);
+
   gatewayManager = new GatewayManager();
   loadQclawConfig();
   setupIPC();

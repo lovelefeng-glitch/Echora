@@ -1118,3 +1118,251 @@ body {
   margin-bottom: 4px;
 }
 .view-header-row .view-title { margin-bottom: 0; }
+
+/* ===== 设置面板 ===== */
+.settings-content { max-width: 700px; }
+
+.settings-section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+  margin-bottom: 16px;
+  background: var(--bg-card);
+}
+
+.settings-section-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  color: var(--text-primary);
+}
+
+.settings-group { margin: 0; }
+
+.settings-slider-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.settings-slider-row label {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.settings-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  min-width: 60px;
+  text-align: right;
+}
+
+.settings-slider {
+  width: 100%;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--border);
+  border-radius: 3px;
+  outline: none;
+  accent-color: var(--accent);
+}
+.settings-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+.settings-hint {
+  font-size: 11px;
+  color: var(--text-hint);
+  margin-top: 4px;
+}
+
+.settings-subtitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: block;
+  margin-bottom: 8px;
+}
+
+.timeout-per-ai-list {}
+
+.timeout-per-ai-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.timeout-per-ai-item:last-child { border-bottom: none; }
+
+.timeout-per-ai-item .ai-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 100px;
+}
+
+.timeout-per-ai-item input[type="number"] {
+  width: 80px;
+  padding: 4px 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 12px;
+  text-align: center;
+}
+
+.timeout-per-ai-item .btn-sm {
+  margin-left: auto;
+}
+
+/* AI Config List */
+.ai-config-list {}
+
+.ai-config-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  margin-bottom: 10px;
+  background: var(--bg-main);
+}
+
+.ai-config-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.ai-config-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ai-config-status {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+.ai-config-status.ok { background: rgba(46, 160, 67, 0.15); color: var(--success); }
+.ai-config-status.error { background: rgba(248, 81, 73, 0.15); color: var(--error); }
+
+.ai-config-path-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ai-config-path-input {
+  flex: 1;
+  padding: 5px 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: monospace;
+}
+
+.ai-config-preview {
+  font-size: 11px;
+  color: var(--text-hint);
+  margin-top: 4px;
+  line-height: 1.6;
+}
+
+.ai-config-preview strong {
+  color: var(--text-secondary);
+}
+
+/* Settings Footer */
+.settings-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.settings-status {
+  font-size: 12px;
+  animation: fadeIn 0.3s;
+}
+.settings-status.success { color: var(--success); }
+.settings-status.error { color: var(--error); }
+
+/* === Hermes 专区 === */
+.hermes-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.hermes-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+  margin-bottom: 12px;
+}
+.hermes-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hermes-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.hermes-value {
+  font-size: 13px;
+  color: var(--fg);
+  word-break: break-all;
+}
+.hermes-value.mono {
+  font-family: 'Cascadia Code', 'JetBrains Mono', monospace;
+  font-size: 12px;
+}
+.hermes-profiles-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+.hermes-profile-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  font-size: 13px;
+}
+.hermes-profile-item .profile-name {
+  font-weight: 500;
+}
+.hermes-profile-item .profile-status {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

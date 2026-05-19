@@ -31,7 +31,13 @@
       "icon": "assets/icon.png"
     }
   },
-  "keywords": ["ai", "chat", "gateway", "agent", "hub"],
+  "keywords": [
+    "ai",
+    "chat",
+    "gateway",
+    "agent",
+    "hub"
+  ],
   "author": "",
   "license": "MIT",
   "devDependencies": {
@@ -40,6 +46,7 @@
   },
   "dependencies": {
     "find-process": "^1.4.10",
+    "js-yaml": "^4.1.1",
     "ps-list": "^8.1.1"
   }
 }

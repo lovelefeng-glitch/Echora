@@ -8,6 +8,22 @@ const { execSync, exec } = require('child_process');
 
 // ========== 已知 AI 软件定义 ==========
 const KNOWN_AI_SOFTWARE = {
+  hermes: {
+    name: 'Hermes',
+    category: 'agent',
+    exeNames: ['hermes.exe', 'hermes-agent.exe'],
+    searchPaths: [
+      path.join(os.homedir(), 'AppData', 'Local', 'hermes'),
+      path.join(os.homedir(), '.hermes'),
+    ],
+    gatewayPatterns: [
+      { processName: 'python.exe', cmdlineIncludes: 'hermes' },
+      { processName: 'hermes.exe', cmdlineIncludes: null },
+      { processName: 'hermes-agent.exe', cmdlineIncludes: null },
+    ],
+    configPattern: 'config.yaml', // YAML 配置
+    apiServerPort: 8642, // Hermes API server 默认端口
+  },
   qclaw: {
     name: 'QClaw',
     category: 'agent',

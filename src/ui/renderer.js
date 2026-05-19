@@ -207,6 +207,11 @@ function renderAIDetect(detected) {
 async function loadMainUI() {
   document.getElementById('app').classList.remove('hidden');
   document.getElementById('welcome-overlay').classList.add('hidden');
+  // 预加载 settings
+  try {
+    const config = await window.echora.config.getAll();
+    STATE.settings = config.settings || { timeout: 120000, timeoutPerAI: {}, pollInterval: 10000 };
+  } catch (e) { STATE.settings = { timeout: 120000, timeoutPerAI: {}, pollInterval: 10000 }; }
 }
 
 async function doScan() {
@@ -483,6 +488,7 @@ function switchView(viewName) {
     if (viewName === 'ai-mgmt') renderAIMgmtView();
     if (viewName === 'conv-mgmt') renderConvMgmt();
     if (viewName === 'env') renderEnvView();
+    if (viewName === 'settings') renderSettingsView();
   }
 }
 
@@ -607,12 +613,13 @@ async function sendMessage() {
   const loadingId = 'msg-loading-' + Date.now() + '-' + Math.random().toString(36).slice(2,6);
   addMessage('assistant', '<span class="loading-dots">⏳ 思考中...</span>', loadingId, false);
 
-  // 安全网：2 分钟后强制移除 loading（复杂回答可能需要较长时间）
+  // 安全网超时：优先从 settings 读取（AI 独立覆盖 > 全局 > 默认 120s）
+  const timeout = (STATE.settings?.timeoutPerAI?.[agent.aiType]) || (STATE.settings?.timeout) || 120000;
   const safetyTimer = setTimeout(() => {
     const el = document.getElementById(loadingId);
     if (el) el.remove();
-    addMessage('assistant', '⏱️ 请求超时，请检查网关是否正常运行');
-  }, 120000);
+    addMessage('assistant', `⏱️ 请求超时 (${Math.round(timeout/1000)}s)，请检查网关是否正常运行`);
+  }, timeout);
 
   try {
     // 用会话唯一的 userId 绑定 QClaw session，每个独立会话走不同窗口
@@ -672,7 +679,7 @@ function addMessage(role, text, msgId, save = true) {
 
 // ========== 添加 AI 弹窗 ==========
 function showAddAIModal(presetType) {
-  const known = [{id:'qclaw',name:'QClaw'},{id:'openclaw',name:'OpenClaw'},{id:'cursor',name:'Cursor'},{id:'windsurf',name:'Windsurf'},{id:'trae',name:'Trae'},{id:'vscode',name:'VS Code'}];
+  const known = [{id:'qclaw',name:'QClaw'},{id:'openclaw',name:'OpenClaw'},{id:'cursor',name:'Cursor'},{id:'windsurf',name:'Windsurf'},{id:'trae',name:'Trae'},{id:'vscode',name:'VS Code'},{id:'hermes',name:'Hermes'}];
   document.getElementById('select-ai-type').innerHTML = '<option value="">选择 AI...</option>' + known.map(k => `<option value="${k.id}" ${presetType===k.id?'selected':''}>${k.name}</option>`).join('');
   document.getElementById('input-ai-path').value = presetType && STATE.aiList.find(a => a.id === presetType)?.path || '';
   document.getElementById('input-ai-port').value = '';
@@ -687,7 +694,7 @@ async function saveAI() {
   await window.echora.ai.setPath(aiType, exePath);
   if (port) await window.echora.config.set(`gatewayConfigs.${aiType}`, { port: parseInt(port) });
   const existing = STATE.aiList.find(a => a.id === aiType);
-  const names = { qclaw:'QClaw',openclaw:'OpenClaw',cursor:'Cursor',windsurf:'Windsurf',trae:'Trae',vscode:'VS Code' };
+  const names = { qclaw:'QClaw',openclaw:'OpenClaw',cursor:'Cursor',windsurf:'Windsurf',trae:'Trae',vscode:'VS Code',hermes:'Hermes' };
   if (existing) { existing.found = true; existing.path = exePath; }
   else { STATE.aiList.push({ id:aiType, name:names[aiType]||aiType, category:'unknown', found:true, path:exePath, status:'offline' }); }
   document.getElementById('add-ai-modal').classList.add('hidden');
@@ -779,6 +786,267 @@ function handleDeleteAllConvs() {
 
 function escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ========== 设置面板 ==========
+
+async function renderSettingsView() {
+  // 确保 settings 已加载
+  if (!STATE.settings) {
+    const config = await window.echora.config.getAll();
+    STATE.settings = config.settings || { timeout: 120000, timeoutPerAI: {}, pollInterval: 10000 };
+  }
+  const s = STATE.settings;
+
+  // --- 超时滑块 ---
+  const sliderTimeout = document.getElementById('slider-timeout');
+  const timeoutVal = document.getElementById('timeout-val');
+  if (sliderTimeout && timeoutVal) {
+    sliderTimeout.value = s.timeout || 120000;
+    timeoutVal.textContent = Math.round((s.timeout || 120000) / 1000) + ' 秒';
+  }
+
+  // --- 按 AI 类型超时 ---
+  const perAIGroup = document.getElementById('timeout-per-ai-group');
+  const perAIList = document.getElementById('timeout-per-ai-list');
+  if (perAIGroup && perAIList) {
+    const aiTypes = [...new Set(STATE.allAgents.map(a => a.aiType).filter(Boolean))];
+    if (aiTypes.length > 0) {
+      perAIGroup.style.display = '';
+      perAIList.innerHTML = aiTypes.map(aiType => {
+        const val = s.timeoutPerAI?.[aiType] || '';
+        return `<div class="timeout-per-ai-item">
+          <span class="ai-label">${aiType}</span>
+          <input type="number" id="timeout-${aiType}" value="${val}" placeholder="${Math.round((s.timeout||120000)/1000)}" min="30" max="600" step="5" data-ai="${aiType}">
+          <span style="font-size:11px;color:var(--text-hint);">秒</span>
+          ${val ? `<button class="btn-sm" data-action="reset-timeout" data-ai="${aiType}" style="background:transparent;border:1px solid var(--border);color:var(--text-hint);border-radius:var(--radius-sm);cursor:pointer;">重置</button>` : ''}
+        </div>`;
+      }).join('');
+    } else {
+      perAIGroup.style.display = 'none';
+    }
+  }
+
+  // --- 轮询滑块 ---
+  const sliderPoll = document.getElementById('slider-poll');
+  const pollVal = document.getElementById('poll-val');
+  if (sliderPoll && pollVal) {
+    sliderPoll.value = Math.round((s.pollInterval || 10000) / 1000);
+    pollVal.textContent = Math.round((s.pollInterval || 10000) / 1000) + ' 秒';
+  }
+
+  // --- AI 配置文件列表 ---
+  renderAIConfigList();
+
+  // --- 滑块实时更新数值 ---
+  if (sliderTimeout && timeoutVal) {
+    sliderTimeout.oninput = () => { timeoutVal.textContent = sliderTimeout.value + ' 秒'; };
+  }
+  if (sliderPoll && pollVal) {
+    sliderPoll.oninput = () => { pollVal.textContent = sliderPoll.value + ' 秒'; };
+  }
+
+  // --- Hermes 配置 ---
+  renderHermesSection();
+}
+
+async function renderAIConfigList() {
+  const container = document.getElementById('ai-config-list');
+  if (!container) return;
+
+  // 读取已注册的配置路径
+  let list = {};
+  try { list = await window.echora.aiConfig.list(); } catch (e) { /* ignore */ }
+
+  const aiTypes = ['qclaw', 'openclaw'];
+  // 追加 STATE.allAgents 中其他 aiType
+  const extraTypes = [...new Set(STATE.allAgents.map(a => a.aiType).filter(t => !aiTypes.includes(t)))];
+  aiTypes.push(...extraTypes);
+
+  container.innerHTML = aiTypes.map(aiType => {
+    const info = list[aiType] || {};
+    const path = info.path || '';
+    const status = info.status || 'unknown';
+    const statusLabel = status === 'ok' ? '✅ 已读取' : status === 'error' ? '❌ 读取失败' : '未注册';
+    const statusClass = status === 'ok' ? 'ok' : status === 'error' ? 'error' : '';
+
+    let previewHTML = '';
+    if (info.preview) {
+      const p = info.preview;
+      const agentNames = (p.agents || []).map(a => `${a.name || a.id}`).join(', ') || '无';
+      const modelCount = (p.models || []).length;
+      previewHTML = `<div class="ai-config-preview">
+        <strong>Agents:</strong> ${agentNames} &nbsp;|&nbsp;
+        <strong>Models:</strong> ${modelCount} 个 provider &nbsp;|&nbsp;
+        <strong>Port:</strong> ${p.port || '未知'}
+        ${info.error ? `<br><span style="color:var(--error);">⚠️ ${escHtml(info.error)}</span>` : ''}
+      </div>`;
+    }
+
+    return `<div class="ai-config-item" data-ai="${aiType}">
+      <div class="ai-config-header">
+        <span class="ai-config-label">${aiType}</span>
+        <span class="ai-config-status ${statusClass}">${statusLabel}</span>
+      </div>
+      <div class="ai-config-path-row">
+        <input type="text" class="ai-config-path-input" id="config-path-${aiType}" value="${escHtml(path)}" placeholder="点击下方自动发现或手动输入路径..." data-ai="${aiType}">
+        <button class="btn btn-secondary btn-sm" data-action="browse-config" data-ai="${aiType}" style="white-space:nowrap;">浏览</button>
+      </div>
+      ${previewHTML}
+    </div>`;
+  }).join('');
+}
+
+/** 渲染 Hermes 配置专区 */
+async function renderHermesSection() {
+  const statusDot = document.getElementById('hermes-indicator');
+  const statusText = document.getElementById('hermes-status-text');
+  const configPath = document.getElementById('hermes-config-path');
+  const apiStatus = document.getElementById('hermes-api-status');
+  const portEl = document.getElementById('hermes-port');
+  const authEl = document.getElementById('hermes-auth');
+  const profilesSection = document.getElementById('hermes-profiles-section');
+  const profilesList = document.getElementById('hermes-profiles-list');
+
+  // 默认状态
+  if (statusDot) statusDot.className = 'status-dot';
+  if (statusText) statusText.textContent = '检测中...';
+
+  try {
+    // 1. 读取 Hermes 配置
+    const configResult = await window.echora.hermes.config();
+    if (!configResult || !configResult.success) {
+      if (statusDot) statusDot.className = 'status-dot offline';
+      if (statusText) statusText.textContent = '未检测到 Hermes 配置';
+      if (configPath) configPath.textContent = '—';
+      if (apiStatus) apiStatus.textContent = '—';
+      if (profilesSection) profilesSection.style.display = 'none';
+      console.warn('[Hermes] config read failed:', configResult?.error);
+      return;
+    }
+
+    const config = configResult.data;
+
+    // 2. 发现路径
+    const discovered = await window.echora.aiConfig.discover();
+    const hermesCfgPath = discovered?.hermes || '—';
+    if (configPath) configPath.textContent = hermesCfgPath;
+
+    // 3. API Server 状态
+    const enabled = config.apiServerEnabled;
+    if (statusDot) statusDot.className = enabled ? 'status-dot online' : 'status-dot offline';
+    if (statusText) statusText.textContent = enabled ? 'API Server 已启用' : 'API Server 未启用';
+    if (apiStatus) apiStatus.textContent = enabled ? '✅ 已启用' : '⚠️ 未启用';
+
+    // 4. 端口
+    if (portEl) portEl.textContent = config.port || '8642';
+
+    // 5. 认证
+    const hasAuth = (config.apiServerEnabled && process.env); // 简化
+    if (authEl) authEl.textContent = '详见配置文件 (API_SERVER_KEY)';
+
+    // 6. Agents
+    if (config.agents && config.agents.length > 0) {
+      // agents 信息不单独展示，融入 profiles 或 overview
+    }
+
+    // 7. Profiles
+    const profiles = await window.echora.hermes.profiles();
+    if (profiles && profiles.length > 0) {
+      if (profilesSection) profilesSection.style.display = '';
+      if (profilesList) {
+        profilesList.innerHTML = profiles.map(p => {
+          const hasCfg = !!p.configPath;
+          return `<div class="hermes-profile-item">
+            <span class="profile-name">${escHtml(p.name)}</span>
+            <span class="profile-status">${hasCfg ? '✅ 可用' : '⚠️ 无配置'}</span>
+          </div>`;
+        }).join('');
+      }
+    } else {
+      if (profilesSection) profilesSection.style.display = 'none';
+    }
+  } catch (e) {
+    if (statusDot) statusDot.className = 'status-dot offline';
+    if (statusText) statusText.textContent = '读取失败';
+    console.warn('[Hermes] renderHermesSection error:', e);
+  }
+}
+
+async function handleSettingsAction(action, aiType) {
+  if (action === 'browse-config') {
+    const r = await window.echora.dialog.openFile({ title: `选择 ${aiType} 配置文件`, filters: [{ name: 'JSON 文件 (*.json)', extensions: ['json'] }, { name: '所有文件', extensions: ['*'] }] });
+    if (!r.canceled && r.filePaths.length > 0) {
+      const input = document.getElementById(`config-path-${aiType}`);
+      if (input) input.value = r.filePaths[0];
+    }
+  }
+  if (action === 'reset-timeout') {
+    const input = document.getElementById(`timeout-${aiType}`);
+    if (input) input.value = '';
+  }
+}
+
+async function saveSettings() {
+  const statusEl = document.getElementById('settings-status');
+  const showStatus = (cls, msg) => { statusEl.className = 'settings-status ' + cls; statusEl.textContent = msg; setTimeout(() => { statusEl.textContent = ''; }, 3000); };
+
+  try {
+    // 收集超时
+    const timeout = parseInt(document.getElementById('slider-timeout')?.value) * 1000 || 120000;
+    const timeoutPerAI = {};
+    const perAIInputs = document.querySelectorAll('#timeout-per-ai-list input[type="number"]');
+    perAIInputs.forEach(input => {
+      const ai = input.dataset.ai;
+      const val = parseInt(input.value);
+      if (ai && !isNaN(val) && val > 0) timeoutPerAI[ai] = val * 1000;
+    });
+
+    // 收集轮询
+    const pollInterval = parseInt(document.getElementById('slider-poll')?.value) * 1000 || 10000;
+
+    // 保存 settings
+    const newSettings = { ...(STATE.settings || {}), timeout, timeoutPerAI, pollInterval };
+    await window.echora.config.set('settings', newSettings);
+    STATE.settings = newSettings;
+
+    // 保存 AI 配置路径
+    const configInputs = document.querySelectorAll('.ai-config-path-input');
+    for (const input of configInputs) {
+      const aiType = input.dataset.ai;
+      const path = input.value.trim();
+      if (aiType && path) {
+        await window.echora.aiConfig.setPath(aiType, path);
+      }
+    }
+
+    // 刷新配置预览
+    await renderAIConfigList();
+
+    showStatus('success', '✅ 设置已保存');
+  } catch (e) {
+    showStatus('error', '❌ 保存失败: ' + e.message);
+  }
+}
+
+async function discoverConfigs() {
+  try {
+    const discovered = await window.echora.aiConfig.discover();
+    for (const [aiType, filePath] of Object.entries(discovered)) {
+      if (filePath) {
+        const input = document.getElementById(`config-path-${aiType}`);
+        if (input) input.value = filePath;
+        await window.echora.aiConfig.setPath(aiType, filePath);
+      }
+    }
+    await renderAIConfigList();
+    document.getElementById('settings-status').className = 'settings-status success';
+    document.getElementById('settings-status').textContent = '✅ 已发现 ' + Object.values(discovered).filter(Boolean).length + ' 个配置文件';
+    setTimeout(() => { document.getElementById('settings-status').textContent = ''; }, 3000);
+  } catch (e) {
+    document.getElementById('settings-status').className = 'settings-status error';
+    document.getElementById('settings-status').textContent = '❌ 发现失败: ' + e.message;
+  }
 }
 
 // ========== 事件绑定 ==========
@@ -874,6 +1142,34 @@ function bindEvents() {
       const badge = item.querySelector('.agent-ai-badge')?.textContent?.toLowerCase() || '';
       item.style.display = n.includes(q) || badge.includes(q) ? '' : 'none';
     });
+  });
+
+  // === 设置面板事件 ===
+  const btnSaveSettings = document.getElementById('btn-save-settings');
+  if (btnSaveSettings) btnSaveSettings.addEventListener('click', saveSettings);
+  const btnDiscoverConfigs = document.getElementById('btn-discover-configs');
+  if (btnDiscoverConfigs) btnDiscoverConfigs.addEventListener('click', discoverConfigs);
+  const btnRefreshConfigs = document.getElementById('btn-refresh-configs');
+  if (btnRefreshConfigs) btnRefreshConfigs.addEventListener('click', async () => { await renderAIConfigList(); });
+
+  // Hermes 专区事件
+  const btnHermesDetect = document.getElementById('btn-hermes-detect');
+  if (btnHermesDetect) btnHermesDetect.addEventListener('click', renderHermesSection);
+  const btnHermesRefresh = document.getElementById('btn-hermes-refresh');
+  if (btnHermesRefresh) btnHermesRefresh.addEventListener('click', renderHermesSection);
+
+  // 事件委托：AI 配置列表 + 超时重置
+  const aiConfigList = document.getElementById('ai-config-list');
+  if (aiConfigList) aiConfigList.addEventListener('click', e => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    handleSettingsAction(btn.dataset.action, btn.dataset.ai);
+  });
+  const timeoutPerAIList = document.getElementById('timeout-per-ai-list');
+  if (timeoutPerAIList) timeoutPerAIList.addEventListener('click', e => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    handleSettingsAction(btn.dataset.action, btn.dataset.ai);
   });
 
   document.querySelectorAll('.modal, .overlay').forEach(el => el.addEventListener('click', e => { if (e.target === el) el.classList.add('hidden'); }));

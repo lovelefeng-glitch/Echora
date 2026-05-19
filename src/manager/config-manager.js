@@ -13,7 +13,11 @@ let configData = {
     autoStartOnBoot: false,
     minimizeToTray: true,
     checkUpdates: true,
+    timeout: 120000,
+    timeoutPerAI: {},
+    pollInterval: 10000,
   },
+  aiConfigPaths: {},     // AI 配置文件路径映射 { qclaw: '...', openclaw: '...' }
 };
 
 const ConfigManager = {
@@ -70,7 +74,11 @@ const ConfigManager = {
         autoStartOnBoot: false,
         minimizeToTray: true,
         checkUpdates: true,
+        timeout: 120000,
+        timeoutPerAI: {},
+        pollInterval: 10000,
       },
+      aiConfigPaths: {},
     };
     this.save();
   },

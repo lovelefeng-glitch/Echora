@@ -207,12 +207,99 @@
 
       <!-- 视图：设置 -->
       <div id="view-settings" class="main-view">
-        <div class="view-content">
+        <div class="view-content settings-content">
           <h2 class="view-title">⚙️ 系统设置</h2>
-          <p class="view-desc">Echora 配置选项</p>
-          <div class="empty-view">
-            <div class="empty-icon">🚧</div>
-            <p>设置功能即将上线</p>
+          <p class="view-desc">Echora 全局配置选项</p>
+
+          <!-- 超时设置 -->
+          <section class="settings-section">
+            <h3 class="settings-section-title">⏱️ 请求超时</h3>
+            <div class="form-group settings-group">
+              <div class="settings-slider-row">
+                <label for="slider-timeout">全局默认超时</label>
+                <span id="timeout-val" class="settings-value">120 秒</span>
+              </div>
+              <input type="range" id="slider-timeout" class="settings-slider" min="30" max="600" step="10" value="120">
+              <div class="settings-hint">范围: 30–600 秒 · QClaw 复杂回答可能需要更长时间</div>
+            </div>
+
+            <div class="form-group" id="timeout-per-ai-group" style="display:none;">
+              <label class="settings-subtitle">按 AI 类型覆盖</label>
+              <div id="timeout-per-ai-list" class="timeout-per-ai-list">
+                <!-- 动态填充 -->
+              </div>
+            </div>
+          </section>
+
+          <!-- 轮询设置 -->
+          <section class="settings-section">
+            <h3 class="settings-section-title">🔄 状态轮询</h3>
+            <div class="form-group settings-group">
+              <div class="settings-slider-row">
+                <label for="slider-poll">轮询间隔</label>
+                <span id="poll-val" class="settings-value">10 秒</span>
+              </div>
+              <input type="range" id="slider-poll" class="settings-slider" min="5" max="60" step="5" value="10">
+              <div class="settings-hint">网关状态刷新频率 · 范围: 5–60 秒</div>
+            </div>
+          </section>
+
+          <!-- AI 配置文件管理 -->
+          <section class="settings-section">
+            <h3 class="settings-section-title">📂 AI 配置文件</h3>
+            <p class="settings-hint" style="margin-bottom:12px;">注册 AI 网关配置文件路径，只读解析 agents、models 等信息（不修改原始文件）</p>
+            <div id="ai-config-list" class="ai-config-list">
+              <!-- 动态填充 -->
+            </div>
+            <div class="settings-actions">
+              <button id="btn-discover-configs" class="btn btn-secondary">🔍 自动发现</button>
+              <button id="btn-refresh-configs" class="btn btn-secondary">🔄 刷新</button>
+            </div>
+          </section>
+
+          <!-- Hermes 专区 -->
+          <section class="settings-section" id="hermes-section">
+            <h3 class="settings-section-title">🔮 Hermes</h3>
+            <div class="form-group">
+              <div class="hermes-status-bar" id="hermes-status-bar">
+                <span id="hermes-indicator" class="status-dot offline"></span>
+                <span id="hermes-status-text">未检测</span>
+              </div>
+              <div class="hermes-info-grid">
+                <div class="hermes-info-item">
+                  <span class="hermes-label">配置文件</span>
+                  <span id="hermes-config-path" class="hermes-value mono">—</span>
+                </div>
+                <div class="hermes-info-item">
+                  <span class="hermes-label">API Server</span>
+                  <span id="hermes-api-status" class="hermes-value">—</span>
+                </div>
+                <div class="hermes-info-item">
+                  <span class="hermes-label">端口</span>
+                  <span id="hermes-port" class="hermes-value mono">8642</span>
+                </div>
+                <div class="hermes-info-item">
+                  <span class="hermes-label">认证</span>
+                  <span id="hermes-auth" class="hermes-value">—</span>
+                </div>
+              </div>
+              <div id="hermes-profiles-section" style="display:none;">
+                <label class="settings-subtitle">Profiles</label>
+                <div id="hermes-profiles-list" class="hermes-profiles-list">
+                  <!-- 动态填充 -->
+                </div>
+              </div>
+            </div>
+            <div class="settings-actions">
+              <button id="btn-hermes-detect" class="btn btn-secondary">🔍 检测</button>
+              <button id="btn-hermes-refresh" class="btn btn-secondary">🔄 刷新配置</button>
+            </div>
+          </section>
+
+          <!-- 保存按钮 -->
+          <div class="settings-footer">
+            <button id="btn-save-settings" class="btn btn-primary">💾 保存设置</button>
+            <span id="settings-status" class="settings-status"></span>
           </div>
         </div>
       </div>
