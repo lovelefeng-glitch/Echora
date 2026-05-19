@@ -103,6 +103,7 @@
 | # | 阻塞项 | 阻塞原因 | 依赖 |
 |---|--------|----------|------|
 | B-1 | ~~OpenClaw/QClaw Gateway API 路径~~ | ~~`/api/status` 返回 404~~ | ✅ 已解决：端点确认为 `/health` + `/v1/chat/completions` |
+| B-2 | Hermes HTTP API（`/v1/chat/completions`）| Hermes proxy 当前只支持 nous/xai OAuth，不支持自定义 provider | 等待 Hermes 实现 StaticAdapter（~30行代码）|
 
 ---
 
