@@ -1,4 +1,4 @@
-// Hermes 适配器 v3.0
+﻿// Hermes 适配器 v3.0
 // 通过 Hermes Gateway API Server 对接（端口 8083）
 // Hermes 自己管理会话上下文、工具调用、记忆、技能
 // Echora 只发最新一条消息，Hermes 从 state.db 加载历史
@@ -65,7 +65,7 @@ class HermesAdapter extends BaseAdapter {
     if (!hermesExe) return { success: false, message: '未找到 Hermes 可执行文件' };
 
     // 启动 hermes gateway run（会自动开启 API Server）
-    const args = ['gateway', 'run'];
+    const args = ['gateway', 'run', '--replace'];
     this._proc = spawn(hermesExe, args, {
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -322,3 +322,5 @@ class HermesAdapter extends BaseAdapter {
 }
 
 module.exports = HermesAdapter;
+
+
