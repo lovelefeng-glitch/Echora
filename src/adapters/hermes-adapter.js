@@ -56,9 +56,9 @@ class HermesAdapter extends BaseAdapter {
       const modelName = this._hermesConfig?.model?.default;
       const customProviders = this._hermesConfig?.custom_providers || [];
 
-      // 查找匹配的 custom provider
+      // 查找匹配的 custom provider（优先按 model 名匹配）
       for (const cp of customProviders) {
-        if (cp.model === modelName || cp.name) {
+        if (cp.model === modelName) {
           this._providerConfig = {
             name: cp.name,
             baseUrl: cp.base_url,
@@ -69,7 +69,7 @@ class HermesAdapter extends BaseAdapter {
         }
       }
 
-      // 如果没找到匹配的 custom provider，用第一个
+      // 没找到精确匹配，用第一个 custom provider
       if (!this._providerConfig && customProviders.length > 0) {
         const cp = customProviders[0];
         this._providerConfig = {

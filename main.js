@@ -1,4 +1,4 @@
-// Echora - Electron Main Process
+﻿// Echora - Electron Main Process
 // 统一管理本地 AI 软件网关终端，实现跨 AI 对话
 // v0.2: 自动检测并接管已运行的网关进程
 
@@ -223,7 +223,7 @@ function loadQclawConfig() {
 }
 
 // ---------- 端口查找 ----------
-const DEFAULT_PORTS = { qclaw: 28789, openclaw: 18789, hermes: 8642 };
+const DEFAULT_PORTS = { qclaw: 28789, openclaw: 18789, hermes: 8645 };
 
 function getGatewayPort(aiType) {
   const gw = gatewayManager.getAllStatus();
@@ -326,10 +326,21 @@ function setupIPC() {
   });
 
   ipcMain.handle('gateway:start', async (event, { aiType, exePath, config }) => {
+    // Hermes 特殊处理：通过 adapter 启动 proxy
+    if (aiType === 'hermes') {
+      const adapter = getOrCreateAdapter('hermes');
+      return adapter.start();
+    }
     return gatewayManager.start(aiType, exePath, config);
   });
 
   ipcMain.handle('gateway:stop', async (event, aiType) => {
+    // Hermes 特殊处理：通过 adapter 停止 proxy
+    if (aiType === 'hermes') {
+      const adapter = adapters.get('hermes');
+      if (adapter) return adapter.stop();
+      return { success: true };
+    }
     return gatewayManager.stop(aiType);
   });
 
