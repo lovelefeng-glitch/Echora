@@ -151,7 +151,7 @@ class HermesAdapter extends BaseAdapter {
       model,
       messages: [{ role: 'user', content: latestMessage }],
       stream: false,
-      max_tokens: 4096,
+      max_tokens: 16384,
     });
 
     const headers = {
@@ -199,7 +199,7 @@ class HermesAdapter extends BaseAdapter {
       model,
       messages: [{ role: 'user', content: latestMessage }],
       stream: true,
-      max_tokens: 4096,
+      max_tokens: 16384,
     });
 
     const url = new URL(this.baseUrl);
@@ -322,5 +322,6 @@ class HermesAdapter extends BaseAdapter {
 }
 
 module.exports = HermesAdapter;
+
 
 
