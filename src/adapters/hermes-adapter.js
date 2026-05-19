@@ -1,4 +1,14 @@
-﻿// Hermes 适配器 v3.1
+﻿const LOG_DIR = require('path').join(require('os').homedir(), 'AppData', 'Local', 'Echora', 'logs');
+function logAdapter(level, msg, data) {
+  try {
+    const fs = require('fs');
+    if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+    const ts = new Date().toISOString();
+    const line = '[' + ts + '] [' + level + '] ' + msg + (data ? ' ' + JSON.stringify(data) : '') + '\n';
+    fs.appendFileSync(require('path').join(LOG_DIR, 'hermes-adapter.log'), line);
+  } catch (e) {}
+}
+// Hermes 适配器 v3.1
 // 通过 Hermes Gateway API Server 对接（端口 8083）
 // Hermes 自己管理会话上下文、工具调用、记忆、技能
 // Echora 只发最新一条消息，Hermes 从 state.db 加载历史
@@ -13,7 +23,7 @@ const yaml = require('js-yaml');
 const os = require('os');
 
 const DEFAULT_API_PORT = 8083;
-const API_KEY = '***';
+const API_KEY = 'echora-shared-secret';
 
 class HermesAdapter extends BaseAdapter {
   constructor(config = {}) {
@@ -78,9 +88,11 @@ class HermesAdapter extends BaseAdapter {
 
     try {
       await this._waitForReady(30000);
+      logAdapter('INFO', 'Hermes API Server started');
       return { success: true, message: 'Hermes API Server 启动成功' };
     } catch (e) {
       this.status = 'error';
+      logAdapter('ERROR', 'sendMessage failed', { error: e.message });
       return { success: false, message: e.message };
     }
   }
@@ -129,6 +141,7 @@ class HermesAdapter extends BaseAdapter {
   // ========== 消息发送（502 自动降级流式） ==========
 
   async sendMessage(agentId, messages, userId) {
+      logAdapter('INFO', 'sendMessage called', { agentId, userId });
     let latestMessage;
     if (Array.isArray(messages)) {
       latestMessage = messages[messages.length - 1]?.content || '';
@@ -157,15 +170,17 @@ class HermesAdapter extends BaseAdapter {
     try {
       const data = await this._httpPost('/v1/chat/completions', body, headers);
       if (data?.choices?.[0]) {
-        return { success: true, content: data.choices[0].message.content, messageId: data.id, sessionId: data._sessionId || userId };
+        logAdapter('INFO', 'sendMessage success', { messageId: data.id });
+      return { success: true, content: data.choices[0].message.content, messageId: data.id, sessionId: data._sessionId || userId };
       }
       return { success: false, message: '无效响应格式' };
     } catch (e) {
       // 502 截断错误：降级为流式模式重试
       if (e.message && e.message.includes('502')) {
-        console.log('[HermesAdapter] 非流式 502，降级为流式重试');
+        logAdapter('WARN', '502 fallback to stream');
         return this._sendViaStream(model, latestMessage, userId);
       }
+      logAdapter('ERROR', 'sendMessage failed', { error: e.message });
       return { success: false, message: e.message };
     }
   }
@@ -373,5 +388,6 @@ class HermesAdapter extends BaseAdapter {
 }
 
 module.exports = HermesAdapter;
+
 
 
