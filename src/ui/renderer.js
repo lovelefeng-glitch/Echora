@@ -157,6 +157,7 @@ function handleGatewayChange(data) {
 }
 function handleGatewayMessage(data) {
   const candidateKey = `${data.aiType}:${data.agentId || 'main'}`;
+  console.log('[Echora DEBUG] handleGatewayMessage:', { aiType: data.aiType, agentId: data.agentId, candidateKey, currentAgentKey: STATE.currentAgentKey, sessionId: data.sessionId || 'N/A', contentPreview: (data.content || '').substring(0, 100) });
   if (STATE.currentAgentKey !== candidateKey) return;
   if (data.role === 'assistant' && data.content) {
     // 清除加载动画（如果有）
@@ -505,6 +506,28 @@ async function selectAgent(agent) {
   } else if (!running && agent.aiType !== 'cursor') {
     document.getElementById('chat-messages').innerHTML = `<div class="empty-state" style="height:auto;padding-top:60px;"><div class="empty-icon">💻</div><h3>${agent.agentName} 未启动</h3><button class="btn btn-primary mgmt-btn-start" data-action="start" data-ai="${agent.aiType}" style="margin-top:12px;">▶️ 启动 ${agent.aiName}</button></div>`;
   }
+
+  loadModelInfo(agent);
+}
+
+// ========== 模型信息 ==========
+async function loadModelInfo(agent) {
+  const agentObj = agent || (STATE.currentAgentKey
+    ? STATE.allAgents.find(a => a.agentKey === STATE.currentAgentKey)
+    : null);
+  if (!agentObj || agentObj.status !== 'running') return;
+  try {
+    const info = await window.echora.agent.modelInfo(agentObj.aiType);
+    if (!info || !info.model) return;
+    const hint = document.getElementById('input-hint');
+    if (hint) {
+      let txt = `✅ ${agentObj.aiName} · 端口 ${agentObj.gatewayPort || '?'}`;
+      txt += ` · 模型 ${info.model}`;
+      if (info.contextWindow) txt += ` · ${(info.contextWindow/1000).toFixed(0)}K 上下文`;
+      if (info.usagePct != null) txt += ` · 已用 ${info.usagePct}%`;
+      hint.textContent = txt;
+    }
+  } catch (e) { /* 忽略 */ }
 }
 
 function refreshConvSelector(agentKey) {
@@ -676,6 +699,23 @@ function updateAIStatus(aiType, status) {
 }
 
 // ========== 聊天 ==========
+let _chunkCleanup = null;
+let _doneCleanup = null;
+
+// 创建流式消息元素（不走 addMessage，因为 addMessage 对 assistant 会跑 Markdown 转义 HTML）
+function createStreamMessage(msgId) {
+  const container = document.getElementById('chat-messages');
+  const empty = container.querySelector('.empty-state');
+  if (empty) empty.remove();
+  const msg = document.createElement('div');
+  msg.className = 'message assistant';
+  msg.id = msgId;
+  msg.innerHTML = '<div class="msg-avatar">🤖</div><div class="msg-body"><span class="loading-dots">⏳ 思考中...</span></div>';
+  container.appendChild(msg);
+  container.parentElement.scrollTop = container.parentElement.scrollHeight;
+  return msg;
+}
+
 async function sendMessage() {
   const text = document.getElementById('chat-input').value.trim();
   if (!text || !STATE.currentAgentKey) return;
@@ -686,44 +726,67 @@ async function sendMessage() {
   document.getElementById('chat-input').value = '';
   document.getElementById('chat-input').style.height = 'auto';
 
-  const loadingId = 'msg-loading-' + Date.now() + '-' + Math.random().toString(36).slice(2,6);
-  addMessage('assistant', '<span class="loading-dots">⏳ 思考中...</span>', loadingId, false);
+  const msgId = 'msg-stream-' + Date.now() + '-' + Math.random().toString(36).slice(2,6);
+  createStreamMessage(msgId);
 
-  // 安全网超时：优先从 settings 读取（AI 独立覆盖 > 全局 > 默认 120s）
   const timeout = (STATE.settings?.timeoutPerAI?.[agent.aiType]) || (STATE.settings?.timeout) || 120000;
   const safetyTimer = setTimeout(() => {
-    const el = document.getElementById(loadingId);
-    if (el) el.remove();
-    addMessage('assistant', `⏱️ 请求超时 (${Math.round(timeout/1000)}s)，请检查网关是否正常运行`);
+    updateMessageContent(msgId, `⏱️ 请求超时 (${Math.round(timeout/1000)}s)`);
+    if (_chunkCleanup) _chunkCleanup();
+    if (_doneCleanup) _doneCleanup();
   }, timeout);
+
+  if (_chunkCleanup) _chunkCleanup();
+  if (_doneCleanup) _doneCleanup();
+
+  _chunkCleanup = window.echora.onStream.onChunk((data) => {
+    if (data.msgId !== msgId) return;
+    clearTimeout(safetyTimer);
+    const rendered = typeof marked !== 'undefined' ? marked.parse(data.content) : data.content;
+    updateMessageContent(msgId, rendered);
+  });
+
+  _doneCleanup = window.echora.onStream.onDone((data) => {
+    if (data.msgId !== msgId) return;
+    clearTimeout(safetyTimer);
+    if (_chunkCleanup) _chunkCleanup();
+    if (_doneCleanup) _doneCleanup();
+
+    if (data.error) {
+      updateMessageContent(msgId, `⚠️ ${data.error}`);
+    } else if (data.content) {
+      const rendered = typeof marked !== 'undefined' ? marked.parse(data.content) : data.content;
+      updateMessageContent(msgId, rendered);
+      const conv = getOrCreateConv(STATE.currentAgentKey);
+      conv.messages.push({ role: 'assistant', content: data.content, time: Date.now() });
+      conv.updatedAt = Date.now();
+      saveConversations();
+      // 刷新模型信息
+      loadModelInfo();
+    } else {
+      updateMessageContent(msgId, '⚠️ 空响应');
+    }
+  });
 
   try {
     const conv = getOrCreateConv(STATE.currentAgentKey);
-    const result = await window.echora.message.send(agent.aiType, agent.agentId, text, conv.userId);
-    clearTimeout(safetyTimer);
-    // 移除 loading 元素（如果还在）
-    const loadingEl = document.getElementById(loadingId);
-    if (loadingEl) loadingEl.remove();
-    // 清除所有可能的加载残留
-    document.querySelectorAll('.loading-dots').forEach(el => el.closest('.message')?.remove());
-    if (result.success && result.content) {
-      addMessage('assistant', result.content);
-    } else {
-      // 错误时给出更友好的提示
-      const errMsg = result.message || '请求失败';
-      // 如果是"不支持 REST 聊天 API"，提示替代方案
-      if (errMsg.includes('不支持')) {
-        addMessage('assistant', `⚠️ ${errMsg}`);
-      } else {
-        addMessage('assistant', `⚠️ ${errMsg}`);
-      }
-    }
+    window.echora.message.sendStream(agent.aiType, agent.agentId, text, conv.userId, msgId);
   } catch (e) {
     clearTimeout(safetyTimer);
-    const loadingEl = document.getElementById(loadingId);
-    if (loadingEl) loadingEl.remove();
-    document.querySelectorAll('.loading-dots').forEach(el => el.closest('.message')?.remove());
-    addMessage('assistant', `⚠️ 发送失败: ${e.message}`);
+    if (_chunkCleanup) _chunkCleanup();
+    if (_doneCleanup) _doneCleanup();
+    updateMessageContent(msgId, `⚠️ 发送失败: ${e.message}`);
+  }
+}
+
+function updateMessageContent(msgId, html) {
+  const el = document.getElementById(msgId);
+  if (!el) return;
+  const body = el.querySelector('.msg-body');
+  if (body) body.innerHTML = html;
+  const container = document.getElementById('chat-messages');
+  if (container && container.parentElement) {
+    container.parentElement.scrollTop = container.parentElement.scrollHeight;
   }
 }
 
@@ -736,7 +799,10 @@ function addMessage(role, text, msgId, save = true) {
   msg.className = `message ${role}`;
   if (msgId) msg.id = msgId;
   const avatarIcon = role === 'user' ? '👤' : '🤖';
-  msg.innerHTML = `<div class="msg-avatar">${avatarIcon}</div><div class="msg-body">${text}</div>`;
+  const rendered = (role === 'assistant' && typeof marked !== 'undefined')
+    ? marked.parse(text)
+    : text;
+  msg.innerHTML = `<div class="msg-avatar">${avatarIcon}</div><div class="msg-body">${rendered}</div>`;
   container.appendChild(msg);
   container.parentElement.scrollTop = container.parentElement.scrollHeight;
 

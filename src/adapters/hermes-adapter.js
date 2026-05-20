@@ -8,10 +8,11 @@ function logAdapter(level, msg, data) {
     fs.appendFileSync(require('path').join(LOG_DIR, 'hermes-adapter.log'), line);
   } catch (e) {}
 }
-// Hermes 适配器 v3.1
+// Hermes 适配器 v3.2
 // 通过 Hermes Gateway API Server 对接（端口 8083）
 // Hermes 自己管理会话上下文、工具调用、记忆、技能
 // Echora 只发最新一条消息，Hermes 从 state.db 加载历史
+// v3.2: getStatus() 改用 gateway_state.json + PID 检测（解决状态识别问题）
 // v3.1: 502 截断错误自动降级为流式模式
 
 const BaseAdapter = require('./base-adapter');
@@ -19,6 +20,7 @@ const { spawn, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
+const net = require('net');
 const yaml = require('js-yaml');
 const os = require('os');
 
@@ -36,6 +38,8 @@ class HermesAdapter extends BaseAdapter {
     this._requestTimeout = 300000;
     this._hermesConfig = null;
     this._configParams = null;
+    this._lastModelInfo = null;
+    this._currentModel = null;  // null = use config default
   }
 
   _loadHermesConfig() {
@@ -111,13 +115,55 @@ class HermesAdapter extends BaseAdapter {
   }
 
   async getStatus() {
+    // 方式0: 快速 TCP 端口检查（< 100ms，不依赖 HTTP）
+    try {
+      await this._testPort(this.apiPort);
+      this.status = 'running';
+      logAdapter('INFO', 'getStatus: running (via TCP connect)', { port: this.apiPort });
+      return { status: 'running', hasChatAPI: true, capabilities: [], fastCheck: true };
+    } catch (e) {
+      logAdapter('DEBUG', 'getStatus: TCP connect failed, trying next methods', { port: this.apiPort, error: e.message });
+    }
+
+    // 方式1: 读 gateway_state.json + 检查 PID 存活（最可靠）
+    try {
+      const hermesRoot = this.config.hermesRoot || path.join(os.homedir(), 'AppData', 'Local', 'hermes');
+      const statePath = path.join(hermesRoot, 'gateway_state.json');
+      if (fs.existsSync(statePath)) {
+        const stateData = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+        if (stateData.gateway_state === 'running' && stateData.pid) {
+          // 检查 PID 是否存活
+          try {
+            process.kill(stateData.pid, 0);  // signal 0 = 检查进程是否存在
+            this.status = 'running';
+            logAdapter('INFO', 'getStatus: running (via gateway_state.json)', { pid: stateData.pid });
+            return {
+              status: 'running',
+              hasChatAPI: true,
+              pid: stateData.pid,
+              apiServerState: stateData.platforms?.api_server?.state || 'unknown',
+              capabilities: [],
+            };
+          } catch (e) {
+            // PID 不存在，进程已死
+            logAdapter('WARN', 'getStatus: PID dead but state says running', { pid: stateData.pid });
+          }
+        }
+      }
+    } catch (e) {
+      logAdapter('DEBUG', 'getStatus: gateway_state.json read failed', { error: e.message });
+    }
+
+    // 方式2: fallback 到 HTTP /health
     try {
       const data = await this._httpGet('/health');
       if (data && (data.status === 'ok' || data.status === 'running' || data.ok)) {
         this.status = 'running';
+        logAdapter('INFO', 'getStatus: running (via /health)');
         return { status: 'running', hasChatAPI: true, capabilities: data.capabilities || [] };
       }
     } catch (e) {}
+
     this.status = 'offline';
     return { status: 'offline' };
   }
@@ -141,7 +187,7 @@ class HermesAdapter extends BaseAdapter {
   // ========== 消息发送（502 自动降级流式） ==========
 
   async sendMessage(agentId, messages, userId) {
-      logAdapter('INFO', 'sendMessage called', { agentId, userId });
+      logAdapter('INFO', 'sendMessage called', { agentId, userId, messageCount: Array.isArray(messages) ? messages.length : 1 });
     let latestMessage;
     if (Array.isArray(messages)) {
       latestMessage = messages[messages.length - 1]?.content || '';
@@ -149,9 +195,10 @@ class HermesAdapter extends BaseAdapter {
       latestMessage = messages || '';
     }
 
-    const model = agentId && agentId !== 'main' && agentId !== 'hermes-agent'
-      ? agentId.replace('hermes-', '')
-      : 'hermes-agent';
+    const model = this._currentModel
+      || (agentId && agentId !== 'main' && agentId !== 'hermes-agent'
+        ? agentId.replace('hermes-', '')
+        : 'hermes-agent');
 
     const body = JSON.stringify({
       model,
@@ -166,11 +213,33 @@ class HermesAdapter extends BaseAdapter {
       'Authorization': `Bearer ${this.apiKey}`,
     };
     if (userId) headers['X-Hermes-Session-Id'] = userId;
+    logAdapter('DEBUG', 'sendMessage headers', {
+      hasSessionId: !!headers['X-Hermes-Session-Id'],
+      sessionId: headers['X-Hermes-Session-Id'] || 'NONE',
+      model,
+      bodyPreview: latestMessage.substring(0, 200),
+    });
 
     try {
       const data = await this._httpPost('/v1/chat/completions', body, headers);
       if (data?.choices?.[0]) {
-        logAdapter('INFO', 'sendMessage success', { messageId: data.id });
+        logAdapter('INFO', 'sendMessage success', {
+          messageId: data.id,
+          requestId: data._requestId || 'N/A',
+          returnedSessionId: data._sessionId || 'N/A',
+          sentSessionId: userId || 'N/A',
+        });
+      // 缓存模型和 usage 信息
+      if (data.usage) {
+        this._lastModelInfo = {
+          model: data.model || 'hermes-agent',
+          promptTokens: data.usage.prompt_tokens || 0,
+          completionTokens: data.usage.completion_tokens || 0,
+          totalTokens: data.usage.total_tokens || 0,
+        };
+      } else if (data.model) {
+        this._lastModelInfo = { model: data.model, promptTokens: null, completionTokens: null, totalTokens: null };
+      }
       return { success: true, content: data.choices[0].message.content, messageId: data.id, sessionId: data._sessionId || userId };
       }
       return { success: false, message: '无效响应格式' };
@@ -214,6 +283,11 @@ class HermesAdapter extends BaseAdapter {
 
       const req = http.request(options, (res) => {
         returnedSessionId = res.headers['x-hermes-session-id'] || null;
+        logAdapter('DEBUG', '_sendViaStream response headers', {
+          statusCode: res.statusCode,
+          returnedSessionId: returnedSessionId || 'N/A',
+          sentSessionId: userId || 'N/A',
+        });
 
         if (res.statusCode >= 400) {
           let errBody = '';
@@ -260,15 +334,23 @@ class HermesAdapter extends BaseAdapter {
       latestMessage = messages || '';
     }
 
-    const model = agentId && agentId !== 'main' && agentId !== 'hermes-agent'
-      ? agentId.replace('hermes-', '')
-      : 'hermes-agent';
+    const model = this._currentModel
+      || (agentId && agentId !== 'main' && agentId !== 'hermes-agent'
+        ? agentId.replace('hermes-', '')
+        : 'hermes-agent');
 
     const body = JSON.stringify({
       model,
       messages: [{ role: 'user', content: latestMessage }],
       stream: true,
       max_tokens: 16384,
+    });
+
+    logAdapter('DEBUG', 'sendMessageStream called', {
+      agentId,
+      userId: userId || 'NONE',
+      model,
+      bodyPreview: latestMessage.substring(0, 200),
     });
 
     const url = new URL(this.baseUrl);
@@ -290,13 +372,18 @@ class HermesAdapter extends BaseAdapter {
 
     const req = http.request(options, (res) => {
       returnedSessionId = res.headers['x-hermes-session-id'] || null;
+      logAdapter('DEBUG', 'sendMessageStream response headers', {
+        statusCode: res.statusCode,
+        returnedSessionId: returnedSessionId || 'N/A',
+        sentSessionId: userId || 'N/A',
+        headers: Object.fromEntries(Object.entries(res.headers).filter(([k]) => k.includes('session') || k.includes('hermes'))),
+      });
 
       if (res.statusCode >= 400) {
         let errBody = '';
         res.on('data', c => errBody += c);
         res.on('end', () => {
           if (onError) onError(new Error(`${res.statusCode}: ${errBody.substring(0, 200)}`));
-          this._emitMessage({ agentId, role: 'assistant', content: `❌ ${res.statusCode}`, done: true, sessionId: returnedSessionId });
         });
         return;
       }
@@ -312,7 +399,6 @@ class HermesAdapter extends BaseAdapter {
           const payload = trimmed.slice(6).trim();
           if (payload === '[DONE]') {
             if (onDone) onDone(fullContent);
-            this._emitMessage({ agentId, role: 'assistant', content: fullContent, done: true, sessionId: returnedSessionId });
             return;
           }
           try {
@@ -323,14 +409,179 @@ class HermesAdapter extends BaseAdapter {
         }
       });
       res.on('end', () => {
-        if (onDone) onDone(fullContent);
-        this._emitMessage({ agentId, role: 'assistant', content: fullContent, done: true, sessionId: returnedSessionId });
+        if (fullContent && onDone) onDone(fullContent);
       });
     });
     req.setTimeout(this._requestTimeout, () => { req.destroy(); if (onError) onError(new Error('请求超时')); });
     req.on('error', (err) => { if (onError) onError(err); });
     req.end(body);
     return req;
+  }
+
+  // ========== 模型信息 ==========
+
+  /**
+   * 获取当前模型信息：名称、上下文窗口大小、当前占用
+   * 优先从缓存的配置解析，其次从最近一次响应的 usage 获取
+   */
+  async getModelInfo() {
+    // 尝试读取 Hermes 配置获取模型名
+    this._loadHermesConfig();
+
+    let modelName = null;
+    let contextWindow = null;
+    let contextUsed = null;
+    let usagePct = null;
+
+    // 1) 从 config.yaml 解析模型信息
+    if (this._hermesConfig) {
+      const provider = this._hermesConfig.model?.provider || this._hermesConfig.provider;
+      const modelId = this._hermesConfig.model?.id || this._hermesConfig.model;
+      if (typeof modelId === 'string') {
+        modelName = modelId;
+      } else if (provider) {
+        modelName = provider;
+      }
+
+      // 上下文窗口：从 config 或已知模型列表推断
+      contextWindow = this._hermesConfig.model?.context_window
+        || this._hermesConfig.model?.max_tokens
+        || 1000000; // Hermes 默认 1M (deepseek-v4-pro)
+    }
+
+    // 2) 尝试从缓存获取 usage
+    if (this._lastModelInfo) {
+      contextUsed = this._lastModelInfo.promptTokens || null;
+      if (!modelName && this._lastModelInfo.model) modelName = this._lastModelInfo.model;
+    }
+
+    // 3) 尝试实时查询 /v1/models
+    if (!modelName) {
+      try {
+        const modelsData = await this._httpGet('/v1/models');
+        if (modelsData?.data?.[0]?.id) {
+          modelName = modelsData.data[0].id;
+        }
+      } catch (e) { /* 忽略 */ }
+    }
+
+    // 4) 计算占用比例
+    if (contextUsed && contextWindow) {
+      usagePct = Math.round((contextUsed / contextWindow) * 100 * 10) / 10;
+    }
+
+    return {
+      model: modelName,
+      contextWindow,
+      contextUsed,
+      usagePct,
+    };
+  }
+
+  // ========== 模型切换 ==========
+
+  /**
+   * 列出可用模型
+   * 来源：1) config.yaml 的 model 2) /v1/models API 3) profiles 下的配置
+   */
+  async listModels() {
+    const models = [];
+    const seen = new Set();
+
+    // 1) 从 config.yaml 解析默认模型
+    this._loadHermesConfig();
+    if (this._hermesConfig) {
+      const defaultModel = this._hermesConfig.model?.id || this._hermesConfig.model;
+      if (typeof defaultModel === 'string' && !seen.has(defaultModel)) {
+        seen.add(defaultModel);
+        models.push({
+          id: defaultModel,
+          name: defaultModel.split('/').pop(),
+          isDefault: true,
+          source: 'config',
+        });
+      }
+    }
+
+    // 2) 从 profiles 解析
+    try {
+      const hermesRoot = this.config.hermesRoot || path.join(os.homedir(), 'AppData', 'Local', 'hermes');
+      const profilesDir = path.join(hermesRoot, 'profiles');
+      if (fs.existsSync(profilesDir)) {
+        const profiles = fs.readdirSync(profilesDir).filter(f =>
+          fs.statSync(path.join(profilesDir, f)).isDirectory()
+        );
+        for (const p of profiles) {
+          const pConfigPath = path.join(profilesDir, p, 'config.yaml');
+          if (!fs.existsSync(pConfigPath)) continue;
+          try {
+            const pConfig = yaml.load(fs.readFileSync(pConfigPath, 'utf8'));
+            const pModel = pConfig.model?.id || pConfig.model;
+            if (typeof pModel === 'string' && !seen.has(pModel)) {
+              seen.add(pModel);
+              models.push({
+                id: pModel,
+                name: `${pModel.split('/').pop()} (${p})`,
+                isDefault: false,
+                source: 'profile',
+                profile: p,
+              });
+            }
+          } catch (e) {}
+        }
+      }
+    } catch (e) {}
+
+    // 3) 尝试从 /v1/models API 获取
+    try {
+      const modelsData = await this._httpGet('/v1/models');
+      if (modelsData?.data && Array.isArray(modelsData.data)) {
+        for (const m of modelsData.data) {
+          if (!seen.has(m.id)) {
+            seen.add(m.id);
+            models.push({
+              id: m.id,
+              name: m.id.split('/').pop(),
+              isDefault: false,
+              source: 'api',
+            });
+          }
+        }
+      }
+    } catch (e) {}
+
+    return models;
+  }
+
+  /**
+   * 设置当前使用的模型
+   * @param {string|null} modelId 模型 ID，null 恢复默认
+   */
+  setModel(modelId) {
+    this._currentModel = modelId || null;
+    logAdapter('INFO', 'setModel', { model: this._currentModel || '(default)' });
+    return { success: true, model: this._currentModel };
+  }
+
+  // ========== 快速端口检查 ==========
+  _testPort(port, timeoutMs = 100) {
+    return new Promise((resolve, reject) => {
+      const socket = new net.Socket();
+      socket.setTimeout(timeoutMs);
+      socket.connect(port, '127.0.0.1', () => { socket.destroy(); resolve(true); });
+      socket.on('error', () => { socket.destroy(); reject(new Error('port not reachable')); });
+      socket.on('timeout', () => { socket.destroy(); reject(new Error('timeout')); });
+    });
+  }
+
+  /**
+   * 获取当前选中的模型 ID
+   */
+  getCurrentModel() {
+    if (this._currentModel) return this._currentModel;
+    // 回退到 config.yaml 默认模型
+    this._loadHermesConfig();
+    return this._hermesConfig?.model?.id || this._hermesConfig?.model || 'hermes-agent';
   }
 
   // ========== 内部方法 ==========
@@ -369,6 +620,14 @@ class HermesAdapter extends BaseAdapter {
         'Authorization': `Bearer ${this.apiKey}`,
         ...extraHeaders,
       };
+      // 详细日志：记录实际发送的 headers 和 body
+      logAdapter('DEBUG', '_httpPost request', {
+        url: `${url.hostname}:${url.port}${url.pathname}`,
+        headers: { ...headers, 'Authorization': 'Bearer ***' },
+        bodyPreview: bodyString.substring(0, 500),
+        hasSessionId: !!extraHeaders['X-Hermes-Session-Id'],
+        sessionId: extraHeaders['X-Hermes-Session-Id'] || 'NONE',
+      });
       const req = http.request({ hostname: url.hostname, port: url.port, path: url.pathname, method: 'POST', timeout: this._requestTimeout, headers }, (res) => {
         let data = ''; res.on('data', c => data += c);
         res.on('end', () => {
@@ -381,7 +640,10 @@ class HermesAdapter extends BaseAdapter {
         });
       });
       req.setTimeout(this._requestTimeout, () => { req.destroy(); reject(new Error('超时')); });
-      req.on('error', reject);
+      req.on('error', (err) => {
+        logAdapter('ERROR', '_httpPost error', { error: err.message });
+        reject(err);
+      });
       req.end(bodyString);
     });
   }

@@ -1,8 +1,8 @@
 # adapters — AI 适配器层
 
-> **文件**: `src/adapters/base-adapter.js`, `src/adapters/openclaw-adapter.js`  
+> **文件**: `src/adapters/base-adapter.js`, `src/adapters/openclaw-adapter.js`, `src/adapters/hermes-adapter.js`, `src/adapters/cursor-adapter.js`  
 > **职责**: 为不同 AI 软件提供统一的对话接口  
-> **最后更新**: 2026-05-18 (v1.0)
+> **最后更新**: 2026-05-21 (v1.2)
 
 ---
 
@@ -80,8 +80,68 @@ adapter.sendMessageStream('main', '你好', {
 |--------|----------|----------|------|
 | `openclaw` | OpenClawAdapter | HTTP/SSE (OpenAI 兼容） | ✅ v1.0 |
 | `qclaw` | OpenClawAdapter | HTTP/SSE (OpenAI 兼容） | ✅ v1.0 |
-| `cursor` | 待实现 | ? | 📅计划 |
+| `hermes` | HermesAdapter | HTTP/SSE (OpenAI 兼容） + X-Hermes-Session-Id | ✅ v3.3 |
+| `cursor` | CursorAdapter | 本地检测 | ✅ v1.0 |
 | `windsurf` | 待实现 | ? | 📅计划 |
+
+---
+
+## HermesAdapter (extends BaseAdapter)
+
+**状态**: ✅ v3.3 — 状态检测已修复（TCP端口 + gateway_state.json + PID检测）  
+**API Server 端口**: `8083`（从 `.env` 的 `API_SERVER_PORT` 读取）  
+**认证方式**: `Authorization: Bearer <API_SERVER_KEY>`（从 `.env` 读取）  
+**会话隔离**: 通过 `X-Hermes-Session-Id` 头传递 session ID
+
+### 关键机制
+
+| 机制 | 说明 |
+|------|------|
+| 状态检测 | 三级：① TCP 连接端口（100ms）→ ② gateway_state.json + PID → ③ HTTP `/health` |
+| 会话隔离 | 每个 Echora 会话生成唯一 `userId = 'echora-conv_' + Date.now()`，通过 `X-Hermes-Session-Id` 传递 |
+| 502 降级 | 非流式请求遇到 502 时自动降级为流式模式重试 |
+| 消息发送 | 只发最新一条消息，Hermes 从 `state.db` 加载历史上下文 |
+| 消息推送 | `sendMessageStream()` 只能通过 `onChunk/onDone/onError` 回调推送，**禁止**调 `_emitMessage()`（会导致重复消息） |
+
+### 状态检测流程（v3.3 新增 TCP 端口检查）
+
+```
+getStatus()
+  ├─ 0. TCP connect 127.0.0.1:port（100ms 超时）
+  │     ├─ 成功 → return { status:'running', fastCheck:true }
+  │     └─ 失败 → 继续
+  ├─ 1. 读 gateway_state.json → 拿到 PID + gateway_state
+  ├─ 2. process.kill(pid, 0) 检查 PID 是否存活
+  │     ├─ 存活 → return running
+  │     └─ 不存在 → 继续
+  └─ 3. fallback: HTTP GET /health
+        ├─ 200 → return running
+        └─ 失败 → return offline
+```
+
+### 会话 ID 传递链路
+
+```
+renderer.js: createNewConv() → userId = 'echora-conv_' + Date.now()
+  ↓
+preload.js: ipcRenderer.invoke('message:send', { userId })
+  ↓
+main.js: adapter.sendMessage(agentId, messages, userId)
+  ↓
+hermes-adapter.js: headers['X-Hermes-Session-Id'] = userId
+  ↓
+Hermes API Server: session_id = provided_session_id → 从 state.db 加载历史
+```
+
+### 依赖
+
+- `js-yaml`（npm）：读取 Hermes `config.yaml`
+- Node 内置 `http`、`fs`、`path`、`os`、`child_process`
+
+### 已知限制
+
+- Hermes 的 `X-Hermes-Session-Id` 需要 `API_SERVER_KEY` 已配置才能生效（否则返回 403）
+- 模型问题（如 `qwen/qwen3.5-122b-a10b` 返回空响应）需要在 Hermes 侧配置 fallback
 
 ---
 

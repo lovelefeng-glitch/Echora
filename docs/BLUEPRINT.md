@@ -1,4 +1,4 @@
-# Echora 项目蓝图 v0.2
+# Echora 项目蓝图 v0.3.5
 
 > **唯一真实来源（Single Source of Truth）**  
 > 任何开发前必须先读此文件和对应的模块文档。  
@@ -40,9 +40,14 @@
 │                    模块层                                   │
 │  detectors/ai-detector.js   → 文件扫描 + 进程检测 + 端口映射 │
 │  detectors/env-checker.js   → 环境依赖检查                   │
+│  detectors/port-scanner.js  → 端口扫描 + HTTP 探测          │
+│  detectors/state-reader.js  → 网关状态文件读取               │
 │  manager/config-manager.js  → 配置持久化                     │
+│  manager/config-reader.js   → AI 配置文件解析（JSON/YAML）   │
 │  adapters/base-adapter.js   → 适配器接口规范                │
-│  adapters/openclaw-adapter.js → OpenClaw API 实现（待完成） │
+│  adapters/openclaw-adapter.js → OpenClaw/QClaw API 实现     │
+│  adapters/hermes-adapter.js → Hermes Gateway API 实现       │
+│  adapters/cursor-adapter.js → Cursor 本地检测               │
 └─────────────────────────────────────────────────────────────┘
                │
                ▼
@@ -50,6 +55,7 @@
 │                  AI 软件网关（外部进程）                      │
 │  QClaw Gateway (port 28789)                                 │
 │  OpenClaw Gateway (port 18789)                             │
+│  Hermes Gateway API Server (port 8083)                     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -190,7 +196,12 @@ class BaseAdapter {
 | 网关管理器 | `src/manager/gateway-manager.js` | 网关生命周期 | ✅ v0.2 完成 |
 | 配置管理器 | `src/manager/config-manager.js` | 持久化配置 | ✅ 完成 |
 | 适配器基类 | `src/adapters/base-adapter.js` | 接口规范 | ✅ 完成 |
-| OpenClaw 适配器 | `src/adapters/openclaw-adapter.js` | OpenClaw API | ⚠️ 待修复（API 路径错误）|
+| OpenClaw 适配器 | `src/adapters/openclaw-adapter.js` | OpenClaw/QClaw API | ✅ v1.0 |
+| Hermes 适配器 | `src/adapters/hermes-adapter.js` | Hermes Gateway API Server | ✅ v3.2 |
+| Cursor 适配器 | `src/adapters/cursor-adapter.js` | Cursor 本地检测 | ✅ v1.0 |
+| 配置读取器 | `src/manager/config-reader.js` | AI 配置文件解析（JSON/YAML）| ✅ 完成 |
+| 端口扫描器 | `src/detectors/port-scanner.js` | 端口扫描 + HTTP 探测 | ✅ 完成 |
+| 状态读取器 | `src/detectors/state-reader.js` | 网关状态文件读取 | ✅ 完成 |
 
 ---
 
@@ -217,24 +228,24 @@ class BaseAdapter {
 
 ## 七、当前已知问题
 
-1. **OpenClaw 适配器 API 路径错误** — `/api/status` 返回 404，需要对照真实 Gateway API 文档修正
-2. **`openclaw-adapter.js` 有 bug** — `exePath` 拼写为 `exePath`（第 14 行），导致 start() 永远失败
+1. **Hermes 模型问题** — `qwen/qwen3.5-122b-a10b`（NVIDIA API）返回空响应，需配置 fallback 到 `deepseek-ai/deepseek-v4-pro`
+2. **Hermes 会话隔离** — 已修复（v3.2），通过 `X-Hermes-Session-Id` 头传递 session ID，state.db 独立存储
 3. **GPU cache 权限报错** — Windows 安全限制，不影响功能
-4. **`aiPaths` 未自动保存 OpenClaw 路径** — 仅通过进程检测接管，未写入配置
+4. **Hermes 状态检测** — 已修复（v3.2），改用 `gateway_state.json` + PID 存活检测
 
 ---
 
 ## 八、下一步计划
 
-- [ ] 修复 `openclaw-adapter.js` 的 `exePath` 拼写错误
-- [ ] 对接真实 OpenClaw Gateway API（需要 API 文档）
-- [ ] 实现 `BaseAdapter` 的 QClaw 适配器
-- [ ] 实现聊天消息的实时接收（WebSocket/SSE）
-- [ ] 添加系统托盘图标和最小化到托盘
-- [ ] 添加"关于"页面和版本检查
+- [ ] P1-4 跨 AI 消息路由
+- [ ] P2-5 聊天消息持久化（历史记录）
+- [ ] P3-2 新增 Windsurf 适配器
+- [ ] P3-3 AI 进程性能监控面板
+- [ ] P3-4 跨 AI 上下文传递
+- [ ] P3-7 Hermes profile 切换
 
 ---
 
-**最后更新**: 2026-05-17  
-**更新人**: AI Assistant  
-**审核人**: （待填写）
+**最后更新**: 2026-05-20 06:55  
+**更新人**: 小雪 (xue)  
+**审核人**: 老板

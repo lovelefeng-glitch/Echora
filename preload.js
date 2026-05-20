@@ -98,14 +98,36 @@ contextBridge.exposeInMainWorld('echora', {
   // ===== Agent 管理 =====
   agent: {
     list: (aiType) => ipcRenderer.invoke('agent:list', aiType),
+    modelInfo: (aiType) => ipcRenderer.invoke('agent:modelInfo', aiType),
   },
 
   // ===== 消息通道（AI 对话） =====
   message: {
     send: (aiType, agentId, text, userId) =>
       ipcRenderer.invoke('message:send', { aiType, agentId, text, userId }),
+
+    // 流式消息发送（fire-and-forget）
+    sendStream: (aiType, agentId, text, userId, msgId) =>
+      ipcRenderer.send('message:sendStream', { aiType, agentId, text, userId, msgId }),
+
     status: (aiType) =>
       ipcRenderer.invoke('message:status', aiType),
+  },
+
+  // ===== 流式消息事件 =====
+  onStream: {
+    // 收到 chunk（实时增量内容）
+    onChunk: (callback) => {
+      const handler = (event, data) => callback(data);
+      ipcRenderer.on('gateway:messageChunk', handler);
+      return () => ipcRenderer.removeListener('gateway:messageChunk', handler);
+    },
+    // 收到完成或错误
+    onDone: (callback) => {
+      const handler = (event, data) => callback(data);
+      ipcRenderer.on('gateway:messageDone', handler);
+      return () => ipcRenderer.removeListener('gateway:messageDone', handler);
+    },
   },
 
   // ===== 启动事件 =====

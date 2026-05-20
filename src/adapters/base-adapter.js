@@ -53,6 +53,39 @@ class BaseAdapter {
   }
 
   /**
+   * 获取模型信息（模型名、上下文窗口、当前占用）
+   * @returns {{ model: string|null, contextWindow: number|null, contextUsed: number|null, usagePct: number|null }}
+   */
+  async getModelInfo() {
+    return { model: null, contextWindow: null, contextUsed: null, usagePct: null };
+  }
+
+  /**
+   * 列出可用模型
+   * @returns {Promise<Array<{id: string, name: string, isDefault: boolean, source: string}>>}
+   */
+  async listModels() {
+    return [];
+  }
+
+  /**
+   * 设置当前使用的模型
+   * @param {string|null} modelId - 模型 ID，null 恢复默认
+   * @returns {{ success: boolean, model: string|null }}
+   */
+  setModel(modelId) {
+    return { success: false, model: null };
+  }
+
+  /**
+   * 获取当前选中的模型 ID
+   * @returns {string|null}
+   */
+  getCurrentModel() {
+    return null;
+  }
+
+  /**
    * 注册接收消息的回调
    * @param {function} callback - (message) => void
    */

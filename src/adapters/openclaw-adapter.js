@@ -10,6 +10,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
+const os = require('os');
 
 class OpenClawAdapter extends BaseAdapter {
   /**
@@ -24,6 +25,26 @@ class OpenClawAdapter extends BaseAdapter {
     this._proc = null;
     this._chatEndpoint = null; // 延迟探测
     this._requestTimeout = 15000;
+    this._currentModel = null;
+    this._defaultModel = null;
+    // 尝试从配置读取默认模型
+    this._loadDefaultModel();
+  }
+
+  /**
+   * 从配置读取默认模型
+   */
+  _loadDefaultModel() {
+    try {
+      const configPath = this.config.configPath
+        || path.join(os.homedir(), this.aiType === 'openclaw' ? '.openclaw' : '.qclaw', 'openclaw.json');
+      if (fs.existsSync(configPath)) {
+        const raw = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        const providers = raw.providers || raw.modelProviders || {};
+        const entries = Array.isArray(providers) ? providers : Object.values(providers);
+        if (entries?.[0]?.model) this._defaultModel = entries[0].model;
+      }
+    } catch (e) {}
   }
 
   /**
@@ -400,6 +421,77 @@ class OpenClawAdapter extends BaseAdapter {
       req.on('error', reject);
       req.end(bodyString);
     });
+  }
+
+  // ========== 模型信息 ==========
+
+  async getModelInfo() {
+    // 尝试从 openclaw.json 读取模型配置
+    const configPath = this.config.configPath
+      || path.join(os.homedir(), this.aiType === 'openclaw' ? '.openclaw' : '.qclaw', 'openclaw.json');
+    let modelName = null;
+    let contextWindow = null;
+
+    try {
+      if (fs.existsSync(configPath)) {
+        const raw = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        // 模型名从 providers 中提取
+        const providers = raw.providers || raw.modelProviders || {};
+        const firstProvider = Object.values(providers)[0];
+        if (firstProvider) {
+          modelName = firstProvider.model || firstProvider.id || null;
+        }
+        // 上下文窗口（如果有的话）
+        contextWindow = raw.contextWindow || null;
+      }
+    } catch (e) { /* 忽略 */ }
+
+    return {
+      model: modelName,
+      contextWindow,
+      contextUsed: null,
+      usagePct: null,
+    };
+  }
+
+  // ========== 模型切换 ==========
+
+  /**
+   * 列出可用模型（从配置文件的 providers 提取）
+   */
+  async listModels() {
+    const models = [];
+    const configPath = this.config.configPath
+      || path.join(os.homedir(), this.aiType === 'openclaw' ? '.openclaw' : '.qclaw', 'openclaw.json');
+    try {
+      if (fs.existsSync(configPath)) {
+        const raw = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        const providers = raw.providers || raw.modelProviders || {};
+        // providers 可能是 object { name: { model, ... } } 或 array [ { model, ... } ]
+        const entries = Array.isArray(providers) ? providers : Object.entries(providers).map(([id, v]) => ({ id, ...v }));
+        for (const p of entries) {
+          const modelId = p.model || p.id;
+          if (!modelId) continue;
+          models.push({
+            id: modelId,
+            name: p.name || modelId,
+            isDefault: models.length === 0,
+            source: 'config',
+          });
+        }
+      }
+    } catch (e) {}
+    return models;
+  }
+
+  setModel(modelId) {
+    this._currentModel = modelId || null;
+    return { success: true, model: this._currentModel };
+  }
+
+  getCurrentModel() {
+    if (this._currentModel) return this._currentModel;
+    return this._defaultModel || null;
   }
 }
 

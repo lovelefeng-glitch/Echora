@@ -49,6 +49,7 @@
 | `env:check` | handle | — | — | `envResult` |
 | `env:install` | handle | — | `tool` | `{ success, message }` |
 | `message:send` | handle | — | `{ aiType, agentId, text }` | `{ success, content?, message? }` |
+| `message:sendStream` | on（fire-and-forget） | — | `{ aiType, agentId, text, userId, msgId }` | —（流式，结果通过推送事件返回） |
 | `message:status` | handle | — | `aiType` | `{ status }` |
 | `agent:list` | handle | — | `aiType` | `[{ id, name, emoji, description }]` |
 | `dialog:openFile` | handle | — | `options` | `{ canceled, filePaths }` |
@@ -60,8 +61,10 @@
 |------|----------|----------|
 | `startup:env-check` | 首次启动 | `{ node:EnvDetail, python:EnvDetail, ... }` |
 | `startup:ai-detected` | 首次启动 | `AIDetected` |
-| `gateway:statusAll` | 启动检查完成 | `{ qclaw:GatewayStatus, ... }` |
-| `gateway:message` | 适配器收到 AI 回复 | `{ aiType, agentId, role, content, done }` |
+| `gateway:statusAll` | 启动检查完成 / 定期轮询 | `{ qclaw:GatewayStatus, ... }` |
+| `gateway:message` | 非流式适配器收到 AI 回复 | `{ aiType, agentId, role, content }` |
+| `gateway:messageChunk` | 流式消息增量推送 | `{ msgId, delta, content }` |
+| `gateway:messageDone` | 流式消息完成（或报错） | `{ msgId, content, error? }` |
 
 ### 辅助函数
 

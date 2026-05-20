@@ -259,7 +259,7 @@ body {
 }
 
 .drawer-content.open {
-  max-height: 260px;
+  max-height: 320px;
   opacity: 1;
   padding: 4px 8px 8px;
 }
@@ -331,6 +331,8 @@ body {
 }
 
 .loading-dots { animation: pulse 1.2s infinite; }
+.stream-cursor { animation: blink 0.8s step-end infinite; color: var(--accent); }
+@keyframes blink { 50% { opacity: 0; } }
 
 /* ===== 主内容区 ===== */
 .main-content {
@@ -720,6 +722,83 @@ body {
 .message.user .msg-body {
   background: var(--accent);
   color: #fff;
+}
+
+/* Markdown code blocks */
+.msg-body pre {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin: 8px 0;
+  overflow-x: auto;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.msg-body code {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  background: var(--bg-primary);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.msg-body pre code {
+  padding: 0;
+  background: none;
+}
+
+.msg-body blockquote {
+  border-left: 3px solid var(--accent);
+  padding-left: 12px;
+  margin: 8px 0;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.msg-body ul, .msg-body ol {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+
+.msg-body li {
+  margin: 4px 0;
+}
+
+.msg-body a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.msg-body h1, .msg-body h2, .msg-body h3 {
+  margin: 12px 0 8px;
+  font-weight: 600;
+}
+
+.msg-body h1 { font-size: 1.4em; }
+.msg-body h2 { font-size: 1.2em; }
+.msg-body h3 { font-size: 1.1em; }
+
+.msg-body p {
+  margin: 8px 0;
+}
+
+.msg-body table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 8px 0;
+}
+
+.msg-body th, .msg-body td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.msg-body th {
+  background: var(--bg-tertiary);
 }
 
 /* 输入区 */
@@ -1381,4 +1460,81 @@ body {
 
 .unknown-gw:hover {
   background: rgba(var(--accent-rgb, 88, 166, 255), 0.1);
+}
+
+/* === 模型信息栏 === */
+.model-info-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  padding: 4px 0;
+  font-size: 11px;
+}
+
+.model-info-spacer {
+  flex: 1;
+}
+
+.model-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(88, 166, 255, 0.12);
+  color: var(--accent);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.model-badge::before {
+  content: '🧠';
+  font-size: 11px;
+}
+
+.model-context {
+  color: var(--text-hint);
+  font-size: 11px;
+}
+
+.model-usage {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.model-usage.warn {
+  color: var(--warning);
+}
+.model-usage.danger {
+  color: var(--error);
+}
+
+.model-selector {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 11px;
+  padding: 3px 6px;
+  max-width: 160px;
+  cursor: pointer;
+  outline: none;
+}
+
+.model-selector:hover { border-color: var(--accent); }
+.model-selector:focus { border-color: var(--accent); }
+
+/* === 打字光标动画 === */
+.typing-cursor {
+  display: inline;
+  animation: blink 1s step-end infinite;
+  color: var(--accent);
+  font-weight: bold;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }

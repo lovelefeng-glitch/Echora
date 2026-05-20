@@ -2,7 +2,7 @@
 
 > **文件**: `src/ui/renderer.js`  
 > **职责**: 所有界面逻辑（向导、侧边栏、聊天、设置）  
-> **最后更新**: 2026-05-17 (v0.2)
+> **最后更新**: 2026-05-21
 
 ---
 
@@ -10,23 +10,20 @@
 
 ```ts
 const STATE = {
-  currentAI: string | null,       // 当前选中 AI 的 id
-  aiList: AIListItem[],           // 所有 AI 项
-  messages: Message[],            // 聊天消息
-  envResult: EnvResults | {},    // 环境检查结果
+  currentAgentKey: string | null,  // 当前选中 agent 的 key
+  currentConvId: string | null,    // 当前会话 ID
+  allAgents: AnyAgent[],           // 所有 AI × Agent 组合
+  aiList: AIListItem[],            // 所有 AI 项
+  conversations: { [agentKey]: { [convId]: Conversation } },
+  modelInfo: { model, contextWindow, usedTokens, ratio } | null,
+  settings: { timeout, timeoutPerAI, pollInterval, aiConfigPaths } | null,
+  envResult: EnvResults | {},
 }
 
-type AIListItem = {
-  id: string,                     // 'qclaw' | 'openclaw' | ...
-  name: string,                   // 'QClaw' | 'OpenClaw' | ...
-  category: string,               // 'agent' | 'ide'
-  found: boolean,                 // 文件是否存在
-  path: string | null,            // 可执行文件路径
-  source: string | null,          // 'auto' | 'manual' | 'path' | 'running'
-  verified: boolean,              // 是否验证过
-  gatewayPort: number | null,     // 网关端口
-  status: string,                 // 'running' | 'offline'
-  gatewayOwned: boolean,          // 进程所有权
+type Conversation = {
+  id: string, userId: string, name: string,
+  messages: { role, content, time }[],
+  createdAt: number, updatedAt: number
 }
 ```
 
@@ -42,6 +39,21 @@ type AIListItem = {
 | `aiDetected` | `startup:ai-detected` | `handleAIDetected(data)` |
 | `onStatusAll` | `gateway:statusAll` | `handleGatewayStatusAll(statuses)` |
 | `onStatusChange` | `gateway:statusChange` | `handleGatewayChange(data)` |
+
+### 流式事件 (v0.5)
+
+| 监听器 | Channel | 触发函数 | 数据 |
+|--------|---------|----------|------|
+| `onStream.onChunk` | `gateway:messageChunk` | 增量更新消息 DOM | `{ msgId, delta, content }` |
+| `onStream.onDone` | `gateway:messageDone` | 完成 + 保存会话 | `{ msgId, content, error? }` |
+
+> `onChunk`/`onDone` 注册在 `echora.onStream.*`（preload.js 暴露），不走 `gateway.onMessage`。
+
+---
+
+## 视图系统
+
+`switchView(viewName)` 切换：`chat` / `ai-mgmt` / `settings-app` / `env` / `conv-mgmt`
 
 ---
 
@@ -66,20 +78,66 @@ type AIListItem = {
 | `doScan()` | 触发 `gateway:refresh` 更新所有状态 |
 | `startGateway(aiType)` | 启动指定 AI 的网关 |
 
-### 聊天
+### 聊天（流式 v0.5）
 
 | 函数 | 用途 |
 |------|------|
-| `sendMessage()` | 发送消息到当前 AI |
-| `addMessage(role, text)` | 添加消息到聊天区 |
+| `sendMessage()` | 创建 msgId 占位消息 → `sendStream()` → 注册 `onChunk`/`onDone` |
+| `updateMessageContent(msgId, html)` | 增量更新消息 DOM（onChunk 调，含闪烁光标 `.stream-cursor`） |
+| `addMessage(role, text, msgId?, save?)` | 普通添加消息（支持 Markdown，非流式路径用） |
+| `renderMarkdown(text)` | 通过 `window.marked.parse()` 渲染（CDN 加载，非 Node require） |
 
-### 配置与设置
+**流式数据流：**
+```
+sendMessage() → sendStream(aiType, agentId, text, userId, msgId)
+  ↓ fire-and-forget
+main.js → adapter.sendMessageStream() → SSE chunks
+  ↓ onChunk
+webContents.send('gateway:messageChunk', { msgId, delta, content })
+  ↓ preload.js onStream.onChunk
+updateMessageContent(msgId, marked(content) + 光标)
+  ↓ onDone
+webContents.send('gateway:messageDone', { msgId, content })
+  ↓ preload.js onStream.onDone
+updateMessageContent(msgId, marked(content)) + saveConversations() + loadModelInfo()
+```
+
+> ⚠️ 流式走 DOM 直接 `document.getElementById(msgId)`，不走 `addMessage()`（后者会转义 HTML 光标标签）。
+
+### Agent 管理
 
 | 函数 | 用途 |
 |------|------|
-| `showEnvModal()` | 打开环境详情弹窗 |
-| `showAddAIModal(presetType?)` | 打开添加 AI 弹窗 |
-| `saveAI()` | 保存新增 AI 路径 |
+| `loadAllAgents()` | 跨 AI 枚举 agent → `STATE.allAgents` |
+| `renderAgentList()` | 渲染侧边栏 agent 列表（running 排前） |
+| `selectAgent(agent)` | 选中 → 加载会话 + 消息历史 + 模型信息 |
+| `buildAvatarHTML(agent)` | emoji/avatar 渲染 |
+
+### 会话管理
+
+| 函数 | 用途 |
+|------|------|
+| `loadConversations()` / `saveConversations()` | IPC 持久化（config:get/set 'conversations'） |
+| `getOrCreateConv(agentKey)` | 获取/创建活跃会话 |
+| `loadConvMessages(conv)` | 加载历史消息到聊天区 |
+| `refreshConvSelector(agentKey)` | 刷新会话下拉选择器 |
+| `newConversation()` / `deleteConversation(convId)` | 新建/删除会话 |
+
+### 模型信息
+
+| 函数 | 用途 |
+|------|------|
+| `loadModelInfo(agent?)` | 调 `agent.modelInfo()` → 更新输入区提示（模型名 + 上下文窗口 + 用量） |
+
+### AI 管理
+
+| 函数 | 用途 |
+|------|------|
+| `renderAIMgmtView()` | 渲染 AI 管理页（启动/停止/移除） |
+| `handleMgmtAction(action, aiType)` | start/stop/restart/remove |
+| `doScanFull()` | 三层深度扫描（端口 + 状态文件 + HTTP） |
+| `renderUnknownGateways(unknowns)` | 未知网关提示 + 添加按钮 |
+| `showAddAIModal(presetType?)` / `saveAI()` | 添加 AI 弹窗流程
 
 ---
 
@@ -101,12 +159,30 @@ type AIListItem = {
 | `#env-modal` | 环境详情弹窗 | `.classList` |
 | `#agent-search` | 搜索框 | `value`, 事件 |
 
+### 新增 (v0.5)
+
+| ID | 用途 | 操作 |
+|----|------|------|
+| `#agent-list` | Agent 侧边栏 | `innerHTML`, `querySelector` |
+| `#conv-selector` | 会话选择器 | `innerHTML`, `classList`, `value` |
+| `#btn-new-conv` | 新建会话按钮 | `classList`, click |
+| `#btn-back-chat` | 返回聊天 | `classList` |
+| `#model-selector` | 模型下拉 | `value`, `onchange` |
+| `#model-info-name` | 模型名 | `textContent` |
+| `#model-info-window` | 上下文窗口大小 | `textContent` |
+| `#model-info-ratio` | 上下文占用比例 | `textContent` |
+| `#btn-mgmt-detect` | 自动检测按钮 | `textContent`, `disabled` |
+| `#mgmt-ai-list` | AI 管理列表容器 | `innerHTML`, `appendChild` |
+| `#drawer-content` / `#drawer-arrow` | 环境抽屉 | `classList` |
+
 ---
 
 ## 修改注意事项
 
-- `objectToList(obj)` 是 AIDetector 返回值 → AIListItem 的转换函数
-- 侧边栏排序规则: `status === 'running'` 的排前面
-- `selectAI` 根据 `ai.status` 决定聊天区的可交互性
-- 向导页的"完成设置"按钮 → `loadMainUI()`
-- AI 图标映射: `AI_ICONS = { qclaw: '🐉', openclaw: '🦞', ... }`
+- 流式消息 DOM 直操，不走 `addMessage()`（HTML 光标标签会被`addMessage`转义）
+- Markdown 用 CDN `window.marked.parse()`，**不要** `require('marked')`（preload 中静默失败）
+- `objectToList(obj)` 是 AIDetector → AIListItem 转换
+- 侧边栏排序: `status === 'running'` 排前面
+- 视图用 `switchView(viewName)` 切换
+- AI 图标: `{ qclaw:'🐉', openclaw:'🦞', hermes:'⚡', cursor:'☝️', ... }`
+- 超时安全网: `settings.timeoutPerAI[aiType]` → `settings.timeout` → 120000 三级 fallback

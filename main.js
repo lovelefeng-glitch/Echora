@@ -152,6 +152,20 @@ async function runStartupChecks() {
     }
   }
 
+  // 2.5 确保 Hermes adapter 已创建，并立即检测状态（不等扫描或轮询）
+  const hermesAdapter = getOrCreateAdapter('hermes');
+  try {
+    const hermesStatus = await hermesAdapter.getStatus();
+    if (hermesStatus.status === 'running') {
+      gatewayManager.attach('hermes', {
+        pid: hermesStatus.pid || 0,
+        port: hermesAdapter.apiPort || 8083,
+        url: `http://127.0.0.1:${hermesAdapter.apiPort || 8083}`,
+      });
+      console.log('[Echora] Hermes 状态确认: running (via getStatus)');
+    }
+  } catch (e) { /* ignore */ }
+
   // 3. 给渲染进程发送已配置 AI + 运行状态
   const aiPaths = config.aiPaths || {};
   const configured = {};
@@ -196,6 +210,25 @@ function startStatusPolling() {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     try {
       const gwStatus = gatewayManager.getAllStatus();
+
+      // Hermes 特殊处理：用 adapter.getStatus() 读 gateway_state.json + PID 检测
+      const hermesAdapter = adapters.get('hermes');
+      if (hermesAdapter) {
+        try {
+          const hermesStatus = await hermesAdapter.getStatus();
+          gwStatus.hermes = {
+            ...gwStatus.hermes,
+            status: hermesStatus.status,
+            pid: hermesStatus.pid || gwStatus.hermes?.pid,
+            port: gwStatus.hermes?.port || 8083,
+            owned: true,
+          };
+          // 同步到 gatewayManager
+          const hermesGw = gatewayManager.processes.get('hermes');
+          if (hermesGw) hermesGw.status = hermesStatus.status;
+        } catch (e) { /* ignore */ }
+      }
+
       safeSend('gateway:statusAll', gwStatus);
     } catch (e) { /* ignore poll errors */ }
   }, 10000); // 每 10 秒
@@ -294,6 +327,24 @@ function setupIPC() {
       }
     }
 
+    // Hermes 特殊处理：用 adapter.getStatus() 读 gateway_state.json
+    const hermesAdapter = adapters.get('hermes');
+    if (hermesAdapter) {
+      try {
+        const hermesStatus = await hermesAdapter.getStatus();
+        if (hermesStatus.status === 'running') {
+          gatewayManager.attach('hermes', {
+            pid: hermesStatus.pid || 0,
+            port: 8083,
+            url: 'http://127.0.0.1:8083',
+          });
+        } else {
+          // Hermes 不在运行，从 gatewayManager 移除
+          gatewayManager.processes.delete('hermes');
+        }
+      } catch (e) { /* ignore */ }
+    }
+
     // 返回已配置的 AI（aiPaths）供 renderer 绑定
     const aiPaths = config.aiPaths || {};
     const configured = {};
@@ -326,9 +377,11 @@ function setupIPC() {
   });
 
   ipcMain.handle('gateway:start', async (event, { aiType, exePath, config }) => {
-    // Hermes 特殊处理：通过 adapter 启动 proxy
+    // Hermes 特殊处理：通过 adapter 启动
     if (aiType === 'hermes') {
       const adapter = getOrCreateAdapter('hermes');
+      // 把 exePath 传给 adapter，让它知道可执行文件在哪
+      if (exePath) adapter.config.exePath = exePath;
       return adapter.start();
     }
     return gatewayManager.start(aiType, exePath, config);
@@ -365,6 +418,16 @@ function setupIPC() {
     }
   });
 
+  ipcMain.handle('agent:modelInfo', async (event, aiType) => {
+    try {
+      const adapter = adapters.get(aiType);
+      if (!adapter || typeof adapter.getModelInfo !== 'function') return { model: null };
+      return await adapter.getModelInfo();
+    } catch (e) {
+      return { model: null };
+    }
+  });
+
   // === 消息通道 ===
 
   ipcMain.handle('message:send', async (event, { aiType, agentId, text, history, userId }) => {
@@ -372,6 +435,32 @@ function setupIPC() {
     // 如果带了 history（Hermes 等无状态 API），用 history；否则用 text（QClaw 等有状态 API）
     const messages = history || [{ role: 'user', content: text }];
     return adapter.sendMessage(agentId || 'main', messages, userId);
+  });
+
+  // 流式消息通道（fire-and-forget，chunk 通过 webContents.send 推送）
+  ipcMain.on('message:sendStream', async (event, { aiType, agentId, text, userId, msgId }) => {
+    const adapter = getOrCreateAdapter(aiType || 'qclaw');
+    const send = (channel, data) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(channel, { msgId, ...data });
+      }
+    };
+    try {
+      adapter.sendMessageStream(agentId || 'main', text, {
+        onChunk: (delta, fullContent) => {
+          send('gateway:messageChunk', { delta, content: fullContent });
+        },
+        onDone: (fullContent, error) => {
+          if (error) send('gateway:messageDone', { error: error.message || String(error) });
+          else send('gateway:messageDone', { content: fullContent });
+        },
+        onError: (error) => {
+          send('gateway:messageDone', { error: error.message || String(error) });
+        }
+      }, userId);
+    } catch (e) {
+      send('gateway:messageDone', { error: e.message });
+    }
   });
 
   ipcMain.handle('message:status', async (event, aiType) => {

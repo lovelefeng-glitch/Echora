@@ -135,6 +135,13 @@
         </section>
         <footer id="input-area" class="input-area">
           <div class="input-hint" id="input-hint">请先选择 Agent</div>
+          <div id="model-info-bar" class="model-info-bar" style="display:none;">
+            <span id="model-name" class="model-badge">--</span>
+            <span id="model-context" class="model-context">--</span>
+            <span id="model-usage" class="model-usage">--%</span>
+            <span class="model-info-spacer"></span>
+            <select id="model-selector" class="model-selector" style="display:none;"></select>
+          </div>
           <div class="input-row">
             <textarea id="chat-input" class="chat-input" placeholder="输入消息..." rows="1" disabled></textarea>
             <button id="btn-send" class="btn btn-send" disabled>⬆️</button>
@@ -351,6 +358,7 @@
   </div>
 </div>
 
+<script src="../node_modules/marked/lib/marked.umd.js"></script>
 <script src="ui/renderer.js"></script>
 </body>
 </html>

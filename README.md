@@ -18,11 +18,13 @@
 
 | 功能 | 描述 |
 |------|------|
-| 🔍 **自动发现** | 扫描系统端口，自动识别运行中的 AI 软件 |
-| 🎛️ **统一管理** | 一个面板启动/停止所有 AI 网关 |
-| 💬 **无缝对话** | 在不同 AI 之间切换对话，保持会话上下文 |
+| 🔍 **自动发现** | 三层扫描：进程匹配 → 端口指纹 → 状态文件，自动识别所有 AI 软件 |
+| 🎛️ **统一管理** | 一个面板启动/停止所有 AI 网关，实时状态灯 |
+| 💬 **流式对话** | SSE 流式渲染 + Markdown 实时呈现 + 代码高亮 |
+| 🤖 **多 Agent 切换** | Agent 列表 + 会话管理 + 多会话创建/删除 |
+| ⚙️ **模型信息** | 实时显示当前模型名、上下文窗口大小、Token 用量 |
 | 🧩 **适配器架构** | 插件式设计，轻松接入新 AI 软件 |
-| 📊 **状态监控** | 实时显示网关运行状态和健康检查 |
+| 📊 **状态监控** | 10s 轮询 + PID 存活检测 + TCP 端口快速探测 |
 
 ## 🤖 支持的 AI 软件
 
@@ -30,7 +32,7 @@
 |------|------|------|
 | **OpenClaw** | ✅ 完整支持 | Gateway API + 会话管理 |
 | **QClaw** | ✅ 完整支持 | 与 OpenClaw 架构相同 |
-| **Hermes** | ✅ 完整支持 | Gateway API Server + 工具/记忆/技能 |
+| **Hermes** | ✅ 完整支持 | Gateway API Server + profiles 多 Agent + 工具/记忆/技能 |
 | **Cursor** | ✅ 基础支持 | 进程检测 + 网关管理 |
 | **Windsurf** | 📋 计划中 | |
 | **Trae** | 📋 计划中 | |
@@ -71,9 +73,11 @@ npm run dev        # 开发者模式（DevTools）
 │              Echora UI (Electron)           │
 ├─────────────────────────────────────────────┤
 │  渲染进程 (renderer.js)                     │
-│  ├── 聊天界面                               │
-│  ├── AI 管理面板                            │
-│  └── 系统设置                               │
+│  ├── 流式对话 + Markdown 渲染               │
+│  ├── 模型信息面板 + 切换                    │
+│  ├── Agent 列表 + 会话管理                  │
+│  ├── AI 管理面板 (三层扫描发现)             │
+│  └── 系统设置 (二级菜单)                    │
 ├─────────────────────────────────────────────┤
 │  主进程 (main.js)                           │
 │  ├── IPC 路由                               │
@@ -83,7 +87,7 @@ npm run dev        # 开发者模式（DevTools）
 │  适配器层                                   │
 │  ├── OpenClaw Adapter                       │
 │  ├── QClaw Adapter                          │
-│  ├── Hermes Adapter (Gateway API Server)    │
+│  ├── Hermes Adapter v3.3 (Gateway API Server + profiles) │
 │  └── Cursor Adapter                         │
 ├─────────────────────────────────────────────┤
 │  检测器层                                   │
@@ -111,7 +115,7 @@ Echora/
 │   ├── adapters/
 │   │   ├── base-adapter.js      # 适配器基类
 │   │   ├── openclaw-adapter.js  # OpenClaw/QClaw 适配器
-│   │   ├── hermes-adapter.js    # Hermes 适配器 (v3.0)
+│   │   ├── hermes-adapter.js    # Hermes 适配器 (v3.3)
 │   │   └── cursor-adapter.js    # Cursor 适配器
 │   ├── detectors/
 │   │   ├── ai-detector.js       # AI 软件检测 (三层发现)
@@ -145,6 +149,17 @@ npm run verify
 ```
 
 ## 📝 更新日志
+
+### v0.5.0 (2026-05-21)
+- ✨ 流式渲染：SSE 逐字推送，打字效果 + Markdown 实时渲染
+- ✨ 模型信息面板：当前模型名 + 上下文窗口 + Token 用量
+- ✨ Markdown 渲染：代码块 / 引用 / 列表 / 标题 / 表格样式
+- ✨ Hermes profile Agent 自动识别（如 minmin 编程专家）
+- ✨ 思考中… 动画：流式等待阶段显示脉冲动画
+- 🐛 修复 Hermes 启动检测延迟（TCP 端口快速探测，100ms 超时）
+- 🐛 修复流式消息重复推送 3 条
+- 🐛 修复抽屉菜单底部图标被遮挡
+- 🔧 Hermes Adapter v3.3: gateway_state.json + PID 存活 + TCP 三级检测
 
 ### v0.4.0 (2026-05-20)
 - ✨ AI 网关自动发现：端口扫描 + 指纹匹配

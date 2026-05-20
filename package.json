@@ -47,6 +47,7 @@
   "dependencies": {
     "find-process": "^1.4.10",
     "js-yaml": "^4.1.1",
+    "marked": "^18.0.4",
     "ps-list": "^8.1.1"
   }
 }
