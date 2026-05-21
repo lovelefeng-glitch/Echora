@@ -743,6 +743,8 @@ async function sendMessage() {
   const agent = STATE.allAgents.find(a => a.agentKey === STATE.currentAgentKey);
   if (!agent) return;
 
+  const msgId = 'msg-stream-' + Date.now() + '-' + Math.random().toString(36).slice(2,6);
+
   addMessage('user', text);
   document.getElementById('chat-input').value = '';
   document.getElementById('chat-input').style.height = 'auto';
@@ -756,6 +758,8 @@ async function sendMessage() {
   if (chatInput) chatInput.disabled = true;
   STATE.streamingMsgId = msgId;
 
+  createStreamMessage(msgId);
+
   function restoreSendButton() {
     const bs = document.getElementById('btn-send');
     const bst = document.getElementById('btn-stop');
@@ -765,9 +769,6 @@ async function sendMessage() {
     if (ci) ci.disabled = false;
     STATE.streamingMsgId = null;
   }
-
-  const msgId = 'msg-stream-' + Date.now() + '-' + Math.random().toString(36).slice(2,6);
-  createStreamMessage(msgId);
 
   const timeout = (STATE.settings?.timeoutPerAI?.[agent.aiType]) || (STATE.settings?.timeout) || 120000;
   const safetyTimer = setTimeout(() => {
