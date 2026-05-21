@@ -496,6 +496,7 @@ function setupIPC() {
         },
         onDone: (fullContent, error, metrics) => {
           activeStreams.delete(msgId);
+          console.log('[Echora DEBUG] onDone from adapter:', { hasContent: !!fullContent, hasMetrics: !!metrics, metrics });
           if (error) send('gateway:messageDone', { error: error.message || String(error) });
           else send('gateway:messageDone', { content: fullContent, metrics: metrics || null });
         },

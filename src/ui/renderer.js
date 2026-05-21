@@ -888,6 +888,7 @@ async function sendMessage() {
   });
 
   _doneCleanup = window.echora.onStream.onDone((data) => {
+    console.log('[Echora DEBUG] onDone received:', { msgId: data.msgId, hasContent: !!data.content, hasMetrics: !!data.metrics, metrics: data.metrics });
     if (data.msgId !== msgId) return;
     clearTimeout(safetyTimer);
     restoreSendButton();
