@@ -809,21 +809,28 @@ async function sendMessage() {
   const toolCleanup = window.echora.onStream.onToolCall((data) => {
     if (data.msgId !== msgId) return;
     toolCallsReceived.push(data);
-    // 显示工具调用状态
+    // 更新 footer 中的工具按钮（不在气泡内）
     const msgEl = document.getElementById(msgId);
     if (msgEl) {
-      const body = msgEl.querySelector('.msg-body');
-      if (body) {
-        // 构建工具调用显示：优先用 label（Hermes 格式），其次用 name
-        const toolDisplay = data.label || data.name || '工具';
-        const statusIcon = data.status === 'completed' ? '✅' : data.status === 'error' ? '❌' : '🔧';
-        const toolHtml = `<div class="tool-call-indicator">${statusIcon} ${toolDisplay}</div>`;
-        const existing = body.querySelector('.tool-call-indicator');
-        if (existing) {
-          existing.textContent = `${statusIcon} ${toolDisplay}`;
-        } else {
-          body.insertAdjacentHTML('afterbegin', toolHtml);
+      let toolBtn = msgEl.querySelector('.btn-tool-calls');
+      if (!toolBtn) {
+        // 找到 footer 区域插入按钮
+        const actionsEl = msgEl.querySelector('.msg-actions');
+        if (actionsEl) {
+          toolBtn = document.createElement('button');
+          toolBtn.className = 'btn-tool-calls';
+          toolBtn.title = '查看工具调用详情';
+          actionsEl.prepend(toolBtn);
         }
+      }
+      if (toolBtn) {
+        const count = toolCallsReceived.length;
+        toolBtn.textContent = `🔧 ${count}`;
+        toolBtn.dataset.tools = JSON.stringify(toolCallsReceived.map(t => ({
+          name: t.name || t.tool || '',
+          label: t.label || '',
+          status: t.status || 'running',
+        })));
       }
     }
   });
@@ -1303,6 +1310,30 @@ async function discoverConfigs() {
 
 // ========== 事件绑定 ==========
 function bindEvents() {
+  // 工具调用详情弹窗（事件委托）
+  document.getElementById('chat-messages')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.btn-tool-calls');
+    if (!btn) return;
+    const tools = JSON.parse(btn.dataset.tools || '[]');
+    if (tools.length === 0) return;
+    // 创建弹窗
+    let overlay = document.getElementById('tool-calls-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'tool-calls-overlay';
+      overlay.className = 'overlay';
+      overlay.innerHTML = '<div class="modal-card" style="max-width:480px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3 style="margin:0;font-size:14px;">🔧 工具调用详情</h3><button id="close-tool-calls" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--text-primary);">✕</button></div><div id="tool-calls-list"></div></div>';
+      document.body.appendChild(overlay);
+      overlay.addEventListener('click', (ev) => { if (ev.target === overlay) overlay.remove(); });
+      overlay.querySelector('#close-tool-calls').addEventListener('click', () => overlay.remove());
+    }
+    const list = overlay.querySelector('#tool-calls-list');
+    list.innerHTML = tools.map(t => {
+      const icon = t.status === 'completed' ? '✅' : t.status === 'error' ? '❌' : '⏳';
+      return `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">${icon} <strong>${t.name}</strong><div style="color:var(--text-secondary);font-size:12px;margin-top:2px;word-break:break-all;">${t.label || '(无详情)'}</div></div>`;
+    }).join('');
+  });
+
   // 停止生成按钮
   document.getElementById('btn-stop')?.addEventListener('click', () => {
     if (STATE.streamingMsgId) {

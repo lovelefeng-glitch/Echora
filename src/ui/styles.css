@@ -953,6 +953,20 @@ body {
   animation: pulse 1.5s ease-in-out infinite;
 }
 
+.btn-tool-calls {
+  background: rgba(255, 193, 7, 0.15);
+  color: #ffc107;
+  border: 1px solid rgba(255, 193, 7, 0.3);
+  border-radius: 4px;
+  font-size: 11px;
+  padding: 2px 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-tool-calls:hover {
+  background: rgba(255, 193, 7, 0.25);
+}
+
 /* ===== 按钮 ===== */
 .btn {
   padding: 6px 14px;
