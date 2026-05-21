@@ -796,14 +796,14 @@ async function sendMessage() {
       if (msgEl) msgEl.classList.add('stream-done');
       const rendered = typeof marked !== 'undefined' ? marked.parse(data.content) : data.content;
       updateMessageContent(msgId, rendered);
-      // 存储复制文本 + 添加底部操作栏（气泡内）
+      // 存储复制文本 + 添加底部操作栏（气泡下方）
       if (msgEl) {
         msgEl.dataset.copyText = data.content;
         const timeStr = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
         const footer = document.createElement('div');
-        footer.className = 'msg-footer';
+        footer.className = 'msg-footer assistant';
         footer.innerHTML = `<span class="msg-time">${timeStr}</span><div class="msg-actions"><button class="btn-copy-msg" title="复制">📋</button></div>`;
-        msgEl.appendChild(footer);
+        msgEl.after(footer);
       }
       const conv = getOrCreateConv(STATE.currentAgentKey);
       conv.messages.push({ role: 'assistant', content: data.content, time: Date.now() });
@@ -856,17 +856,22 @@ function addMessage(role, text, msgId, save = true, timestamp) {
   const rendered = (role === 'assistant' && typeof marked !== 'undefined')
     ? marked.parse(text)
     : text;
-  // 底部操作栏（气泡内）
-  const timeStr = timestamp
-    ? new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-    : new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-  const footerHtml = role === 'assistant'
-    ? `<div class="msg-footer"><span class="msg-time">${timeStr}</span><div class="msg-actions"><button class="btn-copy-msg" title="复制">📋</button></div></div>`
-    : `<div class="msg-footer"><span class="msg-time">${timeStr}</span></div>`;
-  msg.innerHTML = `<div class="msg-avatar">${avatarIcon}</div><div class="msg-body">${rendered}</div>${footerHtml}`;
+  msg.innerHTML = `<div class="msg-avatar">${avatarIcon}</div><div class="msg-body">${rendered}</div>`;
   // 存储用于复制的文本
   if (role === 'assistant') msg.dataset.copyText = text;
   container.appendChild(msg);
+  // 底部操作栏（气泡下方，兄弟节点）
+  const timeStr = timestamp
+    ? new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    : new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  const footer = document.createElement('div');
+  footer.className = `msg-footer ${role}`;
+  if (role === 'assistant') {
+    footer.innerHTML = `<span class="msg-time">${timeStr}</span><div class="msg-actions"><button class="btn-copy-msg" title="复制">📋</button></div>`;
+  } else {
+    footer.innerHTML = `<span class="msg-time">${timeStr}</span>`;
+  }
+  container.appendChild(footer);
   container.parentElement.scrollTop = container.parentElement.scrollHeight;
 
   if (save && STATE.currentAgentKey) {

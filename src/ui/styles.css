@@ -354,13 +354,23 @@ body {
   50% { border-left-color: transparent; }
 }
 
-/* 消息底部操作栏（气泡内） */
+/* 消息底部操作栏（气泡下方） */
 .msg-footer {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 4px;
+  padding-left: 42px;
+  margin-top: 2px;
+  margin-bottom: 8px;
+}
+.msg-footer.assistant {
+  justify-content: flex-end;
+}
+.msg-footer.user {
+  justify-content: flex-end;
+  padding-left: 0;
+  padding-right: 42px;
 }
 .msg-time {
   font-size: 10px;
@@ -375,11 +385,10 @@ body {
   border: none;
   font-size: 12px;
   cursor: pointer;
-  opacity: 0;
+  opacity: 0.5;
   transition: opacity 0.2s;
   padding: 2px 4px;
 }
-.message.assistant:hover .btn-copy-msg { opacity: 0.6; }
 .btn-copy-msg:hover { opacity: 1 !important; }
 .stream-done-mark {
   display: none;
