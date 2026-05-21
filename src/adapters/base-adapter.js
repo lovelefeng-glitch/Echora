@@ -78,6 +78,18 @@ class BaseAdapter {
   }
 
   /**
+   * 切换模型（适配器级别的差异化逻辑）
+   * 默认实现直接调用 setModel()，无需重启。
+   * 子类可重写此方法以实现自定义逻辑（如修改配置 + 重启网关）。
+   * @param {string|null} modelId - 模型 ID，null 恢复默认
+   * @returns {Promise<{success: boolean, needsRestart: boolean, message?: string, model?: string|null}>}
+   */
+  async switchModel(modelId) {
+    const result = this.setModel(modelId);
+    return { success: result.success, needsRestart: false, model: result.model };
+  }
+
+  /**
    * 获取当前选中的模型 ID
    * @returns {string|null}
    */

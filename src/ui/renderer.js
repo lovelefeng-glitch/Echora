@@ -14,6 +14,7 @@ const STATE = {
   allAgents: [],
   conversations: {},
   envResult: {},
+  selectedModel: null,  // 用户当前选择的模型 ID
 };
 
 const MAX_HISTORY = 200;
@@ -526,6 +527,26 @@ async function loadModelInfo(agent) {
       if (info.contextWindow) txt += ` · ${(info.contextWindow/1000).toFixed(0)}K 上下文`;
       if (info.usagePct != null) txt += ` · 已用 ${info.usagePct}%`;
       hint.textContent = txt;
+
+    // 填充模型选择器（保持用户上次选择）
+    const selector = document.getElementById('model-selector');
+    const bar = document.getElementById('model-info-bar');
+    if (selector && bar) {
+      const models = await window.echora.agent.listModels(agentObj.aiType);
+      if (models && models.length > 1) {
+        selector.innerHTML = '';
+        for (const m of models) {
+          const opt = document.createElement('option');
+          opt.value = m.id;
+          opt.textContent = m.name + (m.isDefault ? ' (默认)' : '');
+          if (!STATE.selectedModel && m.isDefault) opt.selected = true;
+          selector.appendChild(opt);
+        }
+        if (STATE.selectedModel) selector.value = STATE.selectedModel;
+        selector.style.display = '';
+        bar.style.display = '';
+      }
+    }
     }
   } catch (e) { /* 忽略 */ }
 }
@@ -1284,6 +1305,71 @@ function bindEvents() {
       item.style.display = n.includes(q) || badge.includes(q) ? '' : 'none';
     });
   });
+
+  // === 模型选择器事件 ===
+  const modelSelector = document.getElementById('model-selector');
+  if (modelSelector) {
+    modelSelector.addEventListener('change', async () => {
+      if (!STATE.currentAgentKey) return;
+      const agent = STATE.allAgents.find(a => a.agentKey === STATE.currentAgentKey);
+      if (!agent) return;
+      const modelId = modelSelector.value || null;
+      const opt = modelSelector.selectedOptions[0];
+      const modelName = opt?.textContent || modelId;
+
+      // 禁用输入 + 选择器，防止用户在切换过程中操作
+      const chatInput = document.getElementById('chat-input');
+      const sendBtn = document.getElementById('btn-send');
+      const hint = document.getElementById('input-hint');
+      modelSelector.disabled = true;
+      if (chatInput) chatInput.disabled = true;
+      if (sendBtn) sendBtn.disabled = true;
+      if (hint) hint.textContent = `🔄 正在切换模型至 ${modelName}...`;
+
+      try {
+        const result = await window.echora.agent.setModel(agent.aiType, modelId);
+        STATE.selectedModel = modelId;
+
+        if (result && result.needsRestart) {
+          // Hermes 等需要重启的适配器：显示加载动画，等待 Gateway 恢复
+          if (hint) hint.textContent = `🔄 ${result.message || 'Gateway 重启中，请稍候...'}`;
+          // 轮询状态直到恢复
+          let retries = 0;
+          const maxRetries = 30; // 最多等 30 秒
+          while (retries < maxRetries) {
+            await new Promise(r => setTimeout(r, 1000));
+            try {
+              const status = await window.echora.agent.modelInfo(agent.aiType);
+              if (status && status.model) {
+                // Gateway 已恢复
+                if (hint) hint.textContent = `✅ 已切换至 ${modelName}`;
+                break;
+              }
+            } catch (e) { /* 等待 */ }
+            retries++;
+            if (retries % 5 === 0 && hint) {
+              hint.textContent = `🔄 Gateway 重启中... (${retries}s)`;
+            }
+          }
+          if (retries >= maxRetries) {
+            if (hint) hint.textContent = `⚠️ 切换超时，请检查 Hermes 状态`;
+          }
+        } else {
+          // 无需重启的适配器（QClaw 等）：直接生效
+          if (hint) hint.textContent = `✅ 已切换至 ${modelName}`;
+        }
+      } catch (e) {
+        if (hint) hint.textContent = `⚠️ 切换失败: ${e.message}`;
+      } finally {
+        // 恢复输入
+        modelSelector.disabled = false;
+        if (chatInput) chatInput.disabled = false;
+        if (sendBtn) sendBtn.disabled = false;
+        // 刷新模型信息面板
+        loadModelInfo(agent);
+      }
+    });
+  }
 
   // === 设置面板事件 ===
   const btnSaveSettings = document.getElementById('btn-save-settings');

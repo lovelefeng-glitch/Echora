@@ -428,6 +428,33 @@ function setupIPC() {
     }
   });
 
+  ipcMain.handle('agent:listModels', async (event, aiType) => {
+    try {
+      const adapter = adapters.get(aiType);
+      if (!adapter || typeof adapter.listModels !== 'function') return [];
+      return await adapter.listModels();
+    } catch (e) {
+      return [];
+    }
+  });
+
+  ipcMain.handle('agent:setModel', async (event, aiType, modelId) => {
+    try {
+      const adapter = adapters.get(aiType);
+      if (!adapter) return { success: false, needsRestart: false, message: '适配器未找到' };
+      // 优先使用 switchModel（差异化逻辑），fallback 到 setModel
+      if (typeof adapter.switchModel === 'function') {
+        return await adapter.switchModel(modelId);
+      } else if (typeof adapter.setModel === 'function') {
+        const result = adapter.setModel(modelId);
+        return { ...result, needsRestart: false };
+      }
+      return { success: false, needsRestart: false };
+    } catch (e) {
+      return { success: false, needsRestart: false, error: e.message };
+    }
+  });
+
   // === 消息通道 ===
 
   ipcMain.handle('message:send', async (event, { aiType, agentId, text, history, userId }) => {

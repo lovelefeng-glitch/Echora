@@ -195,10 +195,18 @@ class HermesAdapter extends BaseAdapter {
       latestMessage = messages || '';
     }
 
-    const model = this._currentModel
-      || (agentId && agentId !== 'main' && agentId !== 'hermes-agent'
-        ? agentId.replace('hermes-', '')
-        : 'hermes-agent');
+    let model = this._currentModel;
+    if (!model) {
+      if (agentId && agentId !== 'main' && agentId !== 'hermes-agent') {
+        model = agentId.replace('hermes-', '');
+      } else {
+        this._loadHermesConfig();
+        const m = this._hermesConfig?.model;
+        model = (m?.default || m?.main) || 'deepseek-ai/deepseek-v4-pro';
+      }
+    }
+
+    logAdapter('DEBUG', 'sendMessage model dispatch', { _currentModel: this._currentModel, resolvedModel: model, agentId });
 
     const body = JSON.stringify({
       model,
@@ -334,10 +342,16 @@ class HermesAdapter extends BaseAdapter {
       latestMessage = messages || '';
     }
 
-    const model = this._currentModel
-      || (agentId && agentId !== 'main' && agentId !== 'hermes-agent'
-        ? agentId.replace('hermes-', '')
-        : 'hermes-agent');
+    let model = this._currentModel;
+    if (!model) {
+      if (agentId && agentId !== 'main' && agentId !== 'hermes-agent') {
+        model = agentId.replace('hermes-', '');
+      } else {
+        this._loadHermesConfig();
+        const m = this._hermesConfig?.model;
+        model = (m?.default || m?.main) || 'deepseek-ai/deepseek-v4-pro';
+      }
+    }
 
     const body = JSON.stringify({
       model,
@@ -418,6 +432,23 @@ class HermesAdapter extends BaseAdapter {
     return req;
   }
 
+  /**
+   * 从 custom_providers 查找指定模型的上下文长度
+   */
+  _findContextLength(modelId) {
+    if (!modelId) return null;
+    try {
+      const providers = this._hermesConfig?.custom_providers;
+      if (!Array.isArray(providers)) return null;
+      for (const p of providers) {
+        if (p.models && p.models[modelId]) {
+          return p.models[modelId].context_length || null;
+        }
+      }
+    } catch (e) {}
+    return null;
+  }
+
   // ========== 模型信息 ==========
 
   /**
@@ -428,25 +459,26 @@ class HermesAdapter extends BaseAdapter {
     // 尝试读取 Hermes 配置获取模型名
     this._loadHermesConfig();
 
-    let modelName = null;
+    let modelName = this._currentModel || null;
     let contextWindow = null;
     let contextUsed = null;
     let usagePct = null;
 
     // 1) 从 config.yaml 解析模型信息
     if (this._hermesConfig) {
-      const provider = this._hermesConfig.model?.provider || this._hermesConfig.provider;
-      const modelId = this._hermesConfig.model?.id || this._hermesConfig.model;
-      if (typeof modelId === 'string') {
-        modelName = modelId;
-      } else if (provider) {
-        modelName = provider;
+      // 模型名：优先 _currentModel，其次 config.model.default/main
+      if (!modelName) {
+        const m = this._hermesConfig.model;
+        modelName = (m && typeof m === 'object') ? (m.default || m.main) : (typeof m === 'string' ? m : null);
       }
 
-      // 上下文窗口：从 config 或已知模型列表推断
-      contextWindow = this._hermesConfig.model?.context_window
-        || this._hermesConfig.model?.max_tokens
-        || 1000000; // Hermes 默认 1M (deepseek-v4-pro)
+      // 上下文窗口：从 custom_providers 匹配当前模型
+      if (!contextWindow) {
+        const targetModel = modelName || this._hermesConfig.model?.default || this._hermesConfig.model?.main;
+        contextWindow = this._findContextLength(targetModel)
+          || this._hermesConfig.model?.context_window
+          || this._hermesConfig.model?.max_tokens;
+      }
     }
 
     // 2) 尝试从缓存获取 usage
@@ -491,7 +523,8 @@ class HermesAdapter extends BaseAdapter {
     // 1) 从 config.yaml 解析默认模型
     this._loadHermesConfig();
     if (this._hermesConfig) {
-      const defaultModel = this._hermesConfig.model?.id || this._hermesConfig.model;
+      const m = this._hermesConfig.model;
+      const defaultModel = (m && typeof m === 'object') ? (m.default || m.main) : m;
       if (typeof defaultModel === 'string' && !seen.has(defaultModel)) {
         seen.add(defaultModel);
         models.push({
@@ -502,6 +535,41 @@ class HermesAdapter extends BaseAdapter {
         });
       }
     }
+
+    // 1.5) 从 custom_providers 解析所有可用模型
+    try {
+      const providers = this._hermesConfig?.custom_providers;
+      if (Array.isArray(providers)) {
+        for (const p of providers) {
+          const pModels = p.models;
+          if (pModels && typeof pModels === 'object') {
+            for (const modelId of Object.keys(pModels)) {
+              if (!seen.has(modelId)) {
+                seen.add(modelId);
+                models.push({
+                  id: modelId,
+                  name: modelId.split('/').pop(),
+                  isDefault: false,
+                  source: 'custom_provider',
+                  provider: p.name || '',
+                });
+              }
+            }
+          }
+          const pSingle = p.model;
+          if (typeof pSingle === 'string' && !seen.has(pSingle)) {
+            seen.add(pSingle);
+            models.push({
+              id: pSingle,
+              name: pSingle,
+              isDefault: false,
+              source: 'custom_provider',
+              provider: p.name || '',
+            });
+          }
+        }
+      }
+    } catch (e) {}
 
     // 2) 从 profiles 解析
     try {
@@ -561,6 +629,69 @@ class HermesAdapter extends BaseAdapter {
     this._currentModel = modelId || null;
     logAdapter('INFO', 'setModel', { model: this._currentModel || '(default)' });
     return { success: true, model: this._currentModel };
+  }
+
+  /**
+   * 切换模型（Hermes 特有逻辑：修改 config.yaml + 重启 Gateway）
+   * Hermes Gateway API Server 忽略请求 body 的 model 字段，
+   * 必须修改 config.yaml 的 model.default 并重启才能生效。
+   * @param {string|null} modelId 模型 ID，null 恢复默认
+   * @returns {Promise<{success: boolean, needsRestart: boolean, message: string, model: string|null}>}
+   */
+  async switchModel(modelId) {
+    const hermesRoot = this.config.hermesRoot || path.join(os.homedir(), 'AppData', 'Local', 'hermes');
+    const configPath = path.join(hermesRoot, 'config.yaml');
+
+    // 1. 读取配置
+    if (!fs.existsSync(configPath)) {
+      logAdapter('ERROR', 'switchModel: config.yaml not found', { configPath });
+      return { success: false, needsRestart: false, message: '找不到 config.yaml' };
+    }
+
+    let config;
+    try {
+      config = yaml.load(fs.readFileSync(configPath, 'utf8'));
+    } catch (e) {
+      logAdapter('ERROR', 'switchModel: config.yaml parse failed', { error: e.message });
+      return { success: false, needsRestart: false, message: '配置文件解析失败: ' + e.message };
+    }
+
+    // 2. 更新 model.default
+    if (!config.model) config.model = {};
+    const oldModel = config.model.default;
+    const newModel = modelId || config.model.main || 'deepseek-ai/deepseek-v4-pro';
+    config.model.default = newModel;
+    this._currentModel = modelId || null;
+
+    logAdapter('INFO', 'switchModel: updating config.yaml', { oldModel, newModel });
+
+    // 3. 写回配置（保留 YAML 格式）
+    try {
+      const yamlStr = yaml.dump(config, {
+        indent: 2,
+        lineWidth: -1,
+        noRefs: true,
+        sortKeys: false,
+        quotingType: '"',
+      });
+      fs.writeFileSync(configPath, yamlStr, 'utf8');
+    } catch (e) {
+      logAdapter('ERROR', 'switchModel: config.yaml write failed', { error: e.message });
+      return { success: false, needsRestart: false, message: '配置文件写入失败: ' + e.message };
+    }
+
+    // 4. 重启 Hermes Gateway
+    logAdapter('INFO', 'switchModel: restarting Gateway', { newModel });
+    try {
+      await this.stop();
+      await new Promise(r => setTimeout(r, 1000));
+      await this.start();
+      logAdapter('INFO', 'switchModel: Gateway restarted successfully', { model: newModel });
+      return { success: true, needsRestart: true, message: `已切换至 ${newModel}，Gateway 已重启`, model: newModel };
+    } catch (e) {
+      logAdapter('ERROR', 'switchModel: Gateway restart failed', { error: e.message });
+      return { success: false, needsRestart: false, message: 'Gateway 重启失败: ' + e.message };
+    }
   }
 
   // ========== 快速端口检查 ==========

@@ -99,6 +99,8 @@ contextBridge.exposeInMainWorld('echora', {
   agent: {
     list: (aiType) => ipcRenderer.invoke('agent:list', aiType),
     modelInfo: (aiType) => ipcRenderer.invoke('agent:modelInfo', aiType),
+    listModels: (aiType) => ipcRenderer.invoke('agent:listModels', aiType),
+    setModel: (aiType, modelId) => ipcRenderer.invoke('agent:setModel', aiType, modelId),
   },
 
   // ===== 消息通道（AI 对话） =====
