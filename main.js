@@ -13,6 +13,7 @@ const GatewayManager = require('./src/manager/gateway-manager');
 const ConfigManager = require('./src/manager/config-manager');
 const OpenClawAdapter = require('./src/adapters/openclaw-adapter');
 const HermesAdapter = require('./src/adapters/hermes-adapter');
+const { server: proxyServer, PROXY_PORT: PROXY_PORT_NUM } = require('./src/proxy/echora-proxy');
 const CursorAdapter = require('./src/adapters/cursor-adapter');
 const ConfigReader = require('./src/manager/config-reader');
 const { createAPIServer } = require('./src/api-server');
@@ -732,6 +733,15 @@ app.whenReady().then(async () => {
 
   // 🔒 端口冲突检测：避免多开
   await checkPortConflict(18790);
+
+  // 启动 Echora Proxy（中间层，捕获 token 用量等指标）
+  try {
+    proxyServer.listen(PROXY_PORT_NUM, '127.0.0.1', () => {
+      console.log('[Echora] Proxy started on port %d', PROXY_PORT_NUM);
+    });
+  } catch (e) {
+    console.warn('[Echora] Proxy start failed:', e.message);
+  }
 
   gatewayManager = new GatewayManager();
   loadQclawConfig();

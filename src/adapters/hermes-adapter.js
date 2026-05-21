@@ -9,7 +9,7 @@ function logAdapter(level, msg, data) {
   } catch (e) {}
 }
 // Hermes 适配器 v3.2
-// 通过 Hermes Gateway API Server 对接（端口 8083）
+// 通过 Echora Proxy（端口 8084）→ Hermes Gateway API Server（端口 8083）
 // Hermes 自己管理会话上下文、工具调用、记忆、技能
 // Echora 只发最新一条消息，Hermes 从 state.db 加载历史
 // v3.2: getStatus() 改用 gateway_state.json + PID 检测（解决状态识别问题）
@@ -24,7 +24,7 @@ const net = require('net');
 const yaml = require('js-yaml');
 const os = require('os');
 
-const DEFAULT_API_PORT = 8083;
+const DEFAULT_API_PORT = 8084;  // 连接 Echora Proxy，不是直接连 Hermes
 const API_KEY = 'echora-shared-secret';
 
 class HermesAdapter extends BaseAdapter {
@@ -464,6 +464,20 @@ class HermesAdapter extends BaseAdapter {
                 status: parsed.status || 'running',
                 id: parsed.toolCallId || '',
               });
+              currentEvent = '';
+              continue;
+            }
+            // Echora Proxy 注入的指标事件
+            if (currentEvent === 'echora.metrics') {
+              logAdapter('DEBUG', 'Echora metrics', { usage: parsed.usage, latency: parsed.latency, toolCalls: parsed.toolCalls });
+              if (parsed.usage && parsed.usage.prompt_tokens > 0) {
+                this._lastModelInfo = {
+                  model: parsed.model || this._lastModelInfo?.model || null,
+                  promptTokens: parsed.usage.prompt_tokens || 0,
+                  completionTokens: parsed.usage.completion_tokens || 0,
+                  totalTokens: parsed.usage.total_tokens || 0,
+                };
+              }
               currentEvent = '';
               continue;
             }
