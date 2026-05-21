@@ -424,46 +424,67 @@ class HermesAdapter extends BaseAdapter {
 
       let buffer = '';
       let lastMessage = null;  // 保存最后一个完整 message（工具调用后可能在这里）
+      let currentEvent = '';   // SSE event type（Hermes 用 hermes.tool.progress 等）
       res.on('data', (chunk) => {
         buffer += chunk.toString();
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
         for (const line of lines) {
           const trimmed = line.trim();
+
+          // 解析 SSE event 类型行
+          if (trimmed.startsWith('event:')) {
+            currentEvent = trimmed.slice(6).trim();
+            continue;
+          }
+
+          // 空行重置 event type
+          if (!trimmed) {
+            currentEvent = '';
+            continue;
+          }
+
           if (!trimmed.startsWith('data: ')) continue;
           const payload = trimmed.slice(6).trim();
           if (payload === '[DONE]') {
-            // 优先用 fullContent，其次用 lastMessage（工具调用后的最终回复）
             const finalContent = fullContent || lastMessage || '';
             if (onDone) onDone(finalContent);
             return;
           }
           try {
             const parsed = JSON.parse(payload);
-            // 捕获 delta.content（普通流式）
+
+            // === Hermes 自定义事件 ===
+            if (currentEvent === 'hermes.tool.progress' && onToolCall) {
+              logAdapter('DEBUG', 'Hermes tool.progress', { tool: parsed.tool, label: parsed.label, status: parsed.status });
+              onToolCall({
+                name: parsed.tool || parsed.name || 'unknown',
+                label: parsed.label || '',
+                status: parsed.status || 'running',
+                id: parsed.toolCallId || '',
+              });
+              currentEvent = '';
+              continue;
+            }
+            // 忽略其他 hermes.* 事件
+            if (currentEvent.startsWith('hermes.')) {
+              currentEvent = '';
+              continue;
+            }
+
+            // === 标准 OpenAI SSE 格式 ===
             const delta = parsed.choices?.[0]?.delta?.content || '';
             if (delta) { fullContent += delta; if (onChunk) onChunk(delta, fullContent); }
-            // 捕获完整 message（工具调用后的最终回复可能在这里）
             const msg = parsed.choices?.[0]?.message?.content;
             if (msg) lastMessage = msg;
-            // 捕获 tool_calls（工具调用信息）
+            // 标准 tool_calls（非 Hermes 适配器可能用这个）
             const toolCalls = parsed.choices?.[0]?.delta?.tool_calls;
             if (Array.isArray(toolCalls) && onToolCall) {
               for (const tc of toolCalls) {
-                logAdapter('DEBUG', 'SSE tool_call', { name: tc.function?.name, args: (tc.function?.arguments || '').substring(0, 100), index: tc.index });
                 if (tc.function?.name) {
-                  onToolCall({
-                    name: tc.function.name,
-                    arguments: tc.function.arguments || '',
-                    id: tc.id || '',
-                    index: tc.index ?? 0,
-                  });
+                  onToolCall({ name: tc.function.name, arguments: tc.function.arguments || '', id: tc.id || '', index: tc.index ?? 0 });
                 }
               }
-            }
-            // 调试：记录所有 SSE 事件类型
-            if (!delta && !msg && !toolCalls) {
-              logAdapter('DEBUG', 'SSE other event', { keys: Object.keys(parsed.choices?.[0]?.delta || {}), full: JSON.stringify(parsed).substring(0, 300) });
             }
           } catch (e) {}
         }

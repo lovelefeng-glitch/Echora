@@ -812,13 +812,15 @@ async function sendMessage() {
     // 显示工具调用状态
     const msgEl = document.getElementById(msgId);
     if (msgEl) {
-      const toolNames = [...new Set(toolCallsReceived.map(t => t.name))];
       const body = msgEl.querySelector('.msg-body');
       if (body) {
-        const toolHtml = `<div class="tool-call-indicator">🔧 ${toolNames.join(', ')}</div>`;
-        // 如果已有内容（不是思考中），追加工具调用指示
-        if (body.querySelector('.tool-call-indicator')) {
-          body.querySelector('.tool-call-indicator').textContent = `🔧 ${toolNames.join(', ')}`;
+        // 构建工具调用显示：优先用 label（Hermes 格式），其次用 name
+        const toolDisplay = data.label || data.name || '工具';
+        const statusIcon = data.status === 'completed' ? '✅' : data.status === 'error' ? '❌' : '🔧';
+        const toolHtml = `<div class="tool-call-indicator">${statusIcon} ${toolDisplay}</div>`;
+        const existing = body.querySelector('.tool-call-indicator');
+        if (existing) {
+          existing.textContent = `${statusIcon} ${toolDisplay}`;
         } else {
           body.insertAdjacentHTML('afterbegin', toolHtml);
         }
