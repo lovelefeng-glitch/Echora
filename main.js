@@ -258,7 +258,7 @@ function loadQclawConfig() {
 }
 
 // ---------- 端口查找 ----------
-const DEFAULT_PORTS = { qclaw: 28789, openclaw: 18789, hermes: 8083 };
+const DEFAULT_PORTS = { qclaw: 28789, openclaw: 18789, hermes: 8084 };
 
 function getGatewayPort(aiType) {
   const gw = gatewayManager.getAllStatus();
