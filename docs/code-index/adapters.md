@@ -2,7 +2,7 @@
 
 > **文件**: `src/adapters/base-adapter.js`, `src/adapters/openclaw-adapter.js`, `src/adapters/hermes-adapter.js`, `src/adapters/cursor-adapter.js`  
 > **职责**: 为不同 AI 软件提供统一的对话接口  
-> **最后更新**: 2026-05-21 (v1.2)
+> **最后更新**: 2026-05-22 (v1.3)
 
 ---
 
@@ -80,7 +80,7 @@ adapter.sendMessageStream('main', '你好', {
 |--------|----------|----------|------|
 | `openclaw` | OpenClawAdapter | HTTP/SSE (OpenAI 兼容） | ✅ v1.0 |
 | `qclaw` | OpenClawAdapter | HTTP/SSE (OpenAI 兼容） | ✅ v1.0 |
-| `hermes` | HermesAdapter | HTTP/SSE (OpenAI 兼容） + X-Hermes-Session-Id | ✅ v3.3 |
+| `hermes` | HermesAdapter | HTTP/SSE (OpenAI 兼容） + X-Hermes-Session-Id + Echora Proxy | ✅ v3.4 |
 | `cursor` | CursorAdapter | 本地检测 | ✅ v1.0 |
 | `windsurf` | 待实现 | ? | 📅计划 |
 
@@ -88,8 +88,9 @@ adapter.sendMessageStream('main', '你好', {
 
 ## HermesAdapter (extends BaseAdapter)
 
-**状态**: ✅ v3.3 — 状态检测已修复（TCP端口 + gateway_state.json + PID检测）  
+**状态**: ✅ v3.4 — Echora Proxy 集成 + metrics 注入 + 端口 8085  
 **API Server 端口**: `8083`（从 `.env` 的 `API_SERVER_PORT` 读取）  
+**代理端口**: `8085`（Echora Proxy，自动转发到 8083）  
 **认证方式**: `Authorization: Bearer <API_SERVER_KEY>`（从 `.env` 读取）  
 **会话隔离**: 通过 `X-Hermes-Session-Id` 头传递 session ID
 

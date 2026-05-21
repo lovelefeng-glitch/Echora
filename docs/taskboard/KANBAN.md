@@ -1,8 +1,8 @@
 ﻿# 任务看板
 
-> **最后更新**: 2026-05-21 07:40  
+> **最后更新**: 2026-05-22 01:34  
 > **活跃开发者**: QClaw (qclaw) | 小雪 (xue)
-> **当前版本**: v0.4.0-dev
+> **当前版本**: v0.6.0-dev
 
 ---
 
@@ -107,8 +107,13 @@
 | P1-27 | [F-8] Hermes profile Agent 端到端：检测→状态→启动→对话 | adapters + detectors + ui | 📅 |
 
 | P1-28 | 🛑 停止生成按钮：前端发送中断信号（Hermes Ctrl+C 等价操作） | ui + main + adapters | ✅ 2026-05-21 |
-| P1-29 | 🔀 不同 AI 软件差异化会话窗口：Hermes 模型切换绑新建会话 / QClaw 不暴露模型列表 | ui + adapters | 🔧 |
-| P1-30 | 🔧 实时显示模型正在调用的工具/Skill（解析 SSE tool_calls delta，流式中展示工具名+参数） | adapters + ui | 📅 |
+| P1-29 | 🔀 不同 AI 软件差异化会话窗口：Hermes 模型切换绑新建会话 / QClaw 不暴露模型列表 | ui + adapters | ✅ 2026-05-21 |
+| P1-30 | 🔧 实时显示模型正在调用的工具/Skill（解析 SSE tool_calls delta，流式中展示工具名+参数） | adapters + ui | ✅ 2026-05-21 |
+| P1-31 | 📡 捕获 Hermes 内部事件流（工具调用进度、技能更新、自我改进等），在 UI 展示通知 | adapters + ui | 📅 |
+| P1-32 | 🔌 Echora Proxy 中间层（端口 8085）：拦截 SSE 流 → 提取 usage/工具/延迟 → 注入 echora.metrics 事件 | adapters + manager | ✅ 2026-05-21 |
+| P1-33 | 📊 消息底部 metrics 显示：completion_tokens + 延迟秒数 | ui + adapters | ✅ 2026-05-21 |
+| P1-34 | 🔧 工具调用持久化 + 弹窗增强：重启不丢失 + 工具名中文映射 + label 截断 | ui | ✅ 2026-05-21 |
+| P1-35 | 📐 模型信息合并到 hint 栏：状态·端口·模型·上下文·已用% + 模型选择器同行 | ui | ✅ 2026-05-21 |
 > **P1-27 子任务拆解：**
 > 1. AIDetector 识别 profiles 目录下的 agent → 渲染为独立 Agent 卡片（带 profile 名称）
 > 2. Profile Agent 未运行时：灰色灯 + 点击聊天区显示「▶️ 启动 minmin」（而非当前「Agent 未启动」通用提示）
@@ -216,6 +221,13 @@ S-1 message:sendStream IPC → S-2 renderer 流式渲染 → S-3 hermes adapter 
 
 **任务**: P1-21, P1-22, P1-23, P2-6, P1-24, P1-25, P1-26
 
+**已完成 Sprint 5** (2026-05-22): ✅ 全部任务交付 + 额外优化
+```
+P1-21~23 流式渲染 → P2-6 Markdown → P1-24~25 模型面板 → P1-26 模型切换
++ P0-6 流式状态 + P1-28 停止按钮 + P1-29 差异化切换 + P1-30 工具显示
++ P1-32 Proxy中间层 + P1-33 metrics显示 + P1-34 工具持久化 + P1-35 hint合并
+```
+
 ---
 
 ## 变更记录
@@ -257,3 +269,19 @@ S-1 message:sendStream IPC → S-2 renderer 流式渲染 → S-3 hermes adapter 
 | 2026-05-21 | P2-8 消息复制按钮: hover显示📋 + clipboard写入 + ✅反馈 + 事件委托 | 小雪 |
 | 2026-05-21 | fix: 工具调用内容丢失(SSE lastMessage捕获) + 绿色光条box-shadow + 复制按钮移到气泡外 + 渲染复制 | 小雪 |
 | 2026-05-21 | fix: 复制按钮+时间戳移到气泡内部 + 历史消息时间戳持久化 | 小雪 |
+| 2026-05-21 | fix: 工具调用内容丢失(SSE lastMessage捕获) + 绿色光条box-shadow + 复制按钮移到气泡外 + 渲染复制 | 小雪 |
+| 2026-05-21 | P0-6 流式状态辨别: stream-thinking/active/done/error 四态 + 左侧光条动画 | 小雪 |
+| 2026-05-21 | P2-8 消息复制按钮: hover显示📋 + clipboard写入 + ✅反馈 + 事件委托 | 小雪 |
+| 2026-05-21 | fix: 复制按钮+时间戳移到气泡下方（兄弟节点），右对齐 | 小雪 |
+| 2026-05-21 | fix: 复制按钮+时间戳放回气泡内部右下角，用分隔线隔开 | 小雪 |
+| 2026-05-21 | fix: footer结构统一（全部在msg-body内部）+ TDZ bug修复 | 小雪 |
+| 2026-05-21 | P1-28 停止生成按钮: activeStreams Map + abort IPC + UI恢复 | 小雪 |
+| 2026-05-21 | P1-30 工具调用显示: hermes.tool.progress SSE解析 + footer按钮 + 弹窗详情 | 小雪 |
+| 2026-05-21 | fix: updateMessageContent保留footer + 内容不重复 + 左右footer布局 | 小雪 |
+| 2026-05-21 | 上下文占用率: 流式usage捕获 + 信息栏展示 + 过滤虚假数据 | 小雪 |
+| 2026-05-21 | 新增 P1-31(Hermes内部事件流) P1-32(Echora Proxy中间层) | 小雪 |
+| 2026-05-21~22 | P1-32 Echora Proxy 交付: SSE拦截+usage提取+metrics注入+端口8085+自动清理+taskkill /F | 小雪 |
+| 2026-05-21~22 | P1-33 消息底部metrics: completion_tokens+延迟秒数+setHintText辅助函数 | 小雪 |
+| 2026-05-21~22 | P1-34 工具持久化: addMessage返回msg+loadConvMessages恢复+工具名中文映射+label截断 | 小雪 |
+| 2026-05-21~22 | P1-35 hint合并: model-info-bar内容移入hint栏+model-selector同行+端口强制8085 | 小雪 |
+| 2026-05-21~22 | Bug修复: onDone双重调用+taskkill /F+代理正则\\s→\s+getOrCreateAdapter端口覆盖 | 小雪 |

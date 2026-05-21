@@ -25,6 +25,9 @@
 | ⚙️ **模型信息** | 实时显示当前模型名、上下文窗口大小、Token 用量 |
 | 🧩 **适配器架构** | 插件式设计，轻松接入新 AI 软件 |
 | 📊 **状态监控** | 10s 轮询 + PID 存活检测 + TCP 端口快速探测 |
+| 🔌 **Echora Proxy** | SSE 中间层拦截 → Token 用量 + 工具调用 + 延迟统计 |
+| 📋 **消息复制** | 每条回复一键复制 + 工具调用详情弹窗 |
+| 🛑 **停止生成** | 流式过程中一键中断 |
 
 ## 🤖 支持的 AI 软件
 
@@ -87,7 +90,7 @@ npm run dev        # 开发者模式（DevTools）
 │  适配器层                                   │
 │  ├── OpenClaw Adapter                       │
 │  ├── QClaw Adapter                          │
-│  ├── Hermes Adapter v3.3 (Gateway API Server + profiles) │
+│  ├── Hermes Adapter v3.4 (Gateway API Server + Proxy + metrics) │
 │  └── Cursor Adapter                         │
 ├─────────────────────────────────────────────┤
 │  检测器层                                   │
@@ -115,8 +118,10 @@ Echora/
 │   ├── adapters/
 │   │   ├── base-adapter.js      # 适配器基类
 │   │   ├── openclaw-adapter.js  # OpenClaw/QClaw 适配器
-│   │   ├── hermes-adapter.js    # Hermes 适配器 (v3.3)
+│   │   ├── hermes-adapter.js    # Hermes 适配器 (v3.4)
 │   │   └── cursor-adapter.js    # Cursor 适配器
+│   ├── proxy/
+│   │   └── echora-proxy.js      # SSE 中间层代理 (v1.0)
 │   ├── detectors/
 │   │   ├── ai-detector.js       # AI 软件检测 (三层发现)
 │   │   ├── port-scanner.js      # 端口扫描 + 指纹匹配
@@ -149,6 +154,23 @@ npm run verify
 ```
 
 ## 📝 更新日志
+
+### v0.6.0 (2026-05-22)
+- ✨ **Echora Proxy 中间层**: SSE 拦截 → Token 用量 + 工具调用 + 延迟统计，注入 echora.metrics 事件
+- ✨ **消息底部 Metrics**: 显示 completion_tokens（本次消耗）+ 总延迟秒数
+- ✨ **工具调用持久化**: 重启后历史消息的工具按钮和 metrics 仍然保留
+- ✨ **工具弹窗增强**: 工具名中文映射（terminal→终端命令）+ label 截断显示
+- ✨ **模型信息合并**: 模型名·上下文·已用% 合并到 hint 栏，模型选择器同行显示
+- ✨ **停止生成按钮**: 流式过程中一键中断 HTTP 请求
+- ✨ **消息复制按钮**: 每条回复底部一键复制
+- ✨ **流式状态可视化**: 思考中/输出中/已完成/出错 四态 + 左侧光条动画
+- ✨ **差异化模型切换**: Hermes 通过 config.yaml + Gateway 重启切换
+- 🐛 修复 onDone 双重调用导致 metrics 丢失
+- 🐛 修复 taskkill 不加 /F 无法杀 node.exe 进程
+- 🐛 修复代理端口正则匹配失败（\\s → \s）
+- 🐛 修复 getOrCreateAdapter 永久覆盖代理端口
+- 🔧 代理端口从 8084 改为 8085（避免端口冲突）
+- 🔧 Hermes Adapter v3.4: onDone 传递 metrics + 工具调用跟踪 + 首 chunk 计时
 
 ### v0.5.0 (2026-05-21)
 - ✨ 流式渲染：SSE 逐字推送，打字效果 + Markdown 实时渲染

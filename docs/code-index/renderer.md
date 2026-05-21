@@ -2,7 +2,7 @@
 
 > **文件**: `src/ui/renderer.js`  
 > **职责**: 所有界面逻辑（向导、侧边栏、聊天、设置）  
-> **最后更新**: 2026-05-21
+> **最后更新**: 2026-05-22
 
 ---
 
@@ -70,6 +70,7 @@ type Conversation = {
 | `selectAI(ai)` | 切换当前 AI，更新聊天区 |
 | `updateAIStatus(aiType, status)` | 更新单个 AI 状态 |
 | `updateAIStatusUI()` | 刷新侧边栏状态指示器 |
+| `setHintText(txt)` | 设置 hint 栏文本，保留 #model-selector 不被覆盖 |
 
 ### 网关操作
 
@@ -84,8 +85,19 @@ type Conversation = {
 |------|------|
 | `sendMessage()` | 创建 msgId 占位消息 → `sendStream()` → 注册 `onChunk`/`onDone` |
 | `updateMessageContent(msgId, html)` | 增量更新消息 DOM（onChunk 调，含闪烁光标 `.stream-cursor`） |
-| `addMessage(role, text, msgId?, save?)` | 普通添加消息（支持 Markdown，非流式路径用） |
+| `addMessage(role, text, msgId?, save?)` | 普通添加消息（支持 Markdown，非流式路径用），**返回 msg 元素** |
 | `renderMarkdown(text)` | 通过 `window.marked.parse()` 渲染（CDN 加载，非 Node require） |
+| `setHintText(txt)` | 设置 hint 栏文本，自动保留 #model-selector |
+
+### 消息 Metrics (v0.6)
+
+| 功能 | 说明 |
+|------|------|
+| Token 显示 | 消息底部显示 completion_tokens（本次消耗），不显示 prompt_tokens（已在 hint 栏 % 展示） |
+| 延迟显示 | 消息底部显示总延迟秒数 |
+| 工具调用 | 消息底部显示 🔧 图标 + 数量，点击弹窗显示工具名（中文映射）+ label |
+| 持久化 | 工具调用和 metrics 随会话保存到 localStorage，重启不丢失 |
+| 恢复 | loadConvMessages() 从历史消息恢复工具按钮和 metrics 标签 |
 
 **流式数据流：**
 ```
@@ -96,13 +108,14 @@ main.js → adapter.sendMessageStream() → SSE chunks
 webContents.send('gateway:messageChunk', { msgId, delta, content })
   ↓ preload.js onStream.onChunk
 updateMessageContent(msgId, marked(content) + 光标)
-  ↓ onDone
-webContents.send('gateway:messageDone', { msgId, content })
+  ↓ onDone (only once, from res.on('end'))
+webContents.send('gateway:messageDone', { msgId, content, metrics })
   ↓ preload.js onStream.onDone
-updateMessageContent(msgId, marked(content)) + saveConversations() + loadModelInfo()
+updateMessageContent(msgId, marked(content)) + 渲染 metrics + saveConversations()
 ```
 
 > ⚠️ 流式走 DOM 直接 `document.getElementById(msgId)`，不走 `addMessage()`（后者会转义 HTML 光标标签）。
+> ⚠️ onDone 只触发一次（res.on('end')），SSE [DONE] 不再触发 onDone，避免 metrics 丢失。
 
 ### Agent 管理
 
