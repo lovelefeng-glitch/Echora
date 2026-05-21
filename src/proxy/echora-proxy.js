@@ -267,19 +267,34 @@ const server = http.createServer((req, res) => {
 });
 
 // ========== 启动 ==========
-server.listen(PROXY_PORT, '127.0.0.1', () => {
-  log('INFO', `Echora Proxy started`, { port: PROXY_PORT, upstream: UPSTREAM_URL });
-  console.log(`[Echora Proxy] 🚀 Listening on http://127.0.0.1:${PROXY_PORT}`);
-  console.log(`[Echora Proxy] → Upstream: ${UPSTREAM_URL}`);
-});
+let proxyRetryCount = 0;
+
+function startProxy() {
+  server.listen(PROXY_PORT, '127.0.0.1', () => {
+    log('INFO', 'Echora Proxy started', { port: PROXY_PORT, upstream: UPSTREAM_URL });
+    console.log(`[Echora Proxy] Listening on http://127.0.0.1:${PROXY_PORT}`);
+    console.log(`[Echora Proxy] Upstream: ${UPSTREAM_URL}`);
+  });
+}
 
 server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`[Echora Proxy] Port ${PROXY_PORT} already in use, proxy disabled`);
+  if (err.code === 'EADDRINUSE' && proxyRetryCount < 2) {
+    proxyRetryCount++;
+    log('WARN', `Port ${PROXY_PORT} in use, killing stale process...`);
+    console.log(`[Echora Proxy] Port ${PROXY_PORT} in use, cleaning up...`);
+    const killed = killPortProcess(PROXY_PORT);
+    if (killed) {
+      setTimeout(() => startProxy(), 500);
+    } else {
+      console.log(`[Echora Proxy] Could not free port ${PROXY_PORT}, proxy disabled`);
+      log('ERROR', 'Could not free port, proxy disabled');
+    }
   } else {
     console.error(`[Echora Proxy] Error:`, err.message);
+    log('ERROR', `Proxy error: ${err.message}`);
   }
-  // 不退出进程，Echora 可以在没有代理的情况下运行
 });
+
+startProxy();
 
 module.exports = { server, PROXY_PORT, UPSTREAM_URL };
