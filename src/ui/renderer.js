@@ -1305,7 +1305,13 @@ function bindEvents() {
   document.getElementById('btn-stop')?.addEventListener('click', () => {
     if (STATE.streamingMsgId) {
       window.echora.message.abortStream(STATE.streamingMsgId);
-      // 直接恢复 UI，不依赖回调（回调可能不触发）
+      // 更新气泡状态：stream-active → stream-error（表示被中断）
+      const msgEl = document.getElementById(STATE.streamingMsgId);
+      if (msgEl) {
+        msgEl.classList.remove('stream-thinking', 'stream-active');
+        msgEl.classList.add('stream-done');
+      }
+      // 直接恢复 UI
       const bs = document.getElementById('btn-send');
       const bst = document.getElementById('btn-stop');
       const ci = document.getElementById('chat-input');

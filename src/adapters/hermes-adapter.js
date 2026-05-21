@@ -450,6 +450,7 @@ class HermesAdapter extends BaseAdapter {
             const toolCalls = parsed.choices?.[0]?.delta?.tool_calls;
             if (Array.isArray(toolCalls) && onToolCall) {
               for (const tc of toolCalls) {
+                logAdapter('DEBUG', 'SSE tool_call', { name: tc.function?.name, args: (tc.function?.arguments || '').substring(0, 100), index: tc.index });
                 if (tc.function?.name) {
                   onToolCall({
                     name: tc.function.name,
@@ -459,6 +460,10 @@ class HermesAdapter extends BaseAdapter {
                   });
                 }
               }
+            }
+            // 调试：记录所有 SSE 事件类型
+            if (!delta && !msg && !toolCalls) {
+              logAdapter('DEBUG', 'SSE other event', { keys: Object.keys(parsed.choices?.[0]?.delta || {}), full: JSON.stringify(parsed).substring(0, 300) });
             }
           } catch (e) {}
         }
