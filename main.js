@@ -289,9 +289,9 @@ function getOrCreateAdapter(aiType, port) {
     adapter = new CursorAdapter({ aiType: 'cursor' });
   } else if (aiType === 'hermes') {
     adapter = new HermesAdapter({
-      port: finalPort,
+      port: 8084,  // 优先走代理（自动回退直连 8083）
       token: process.env.API_SERVER_KEY || '',
-      baseUrl,
+      baseUrl: 'http://127.0.0.1:8084',
     });
   } else {
     adapter = new OpenClawAdapter({
