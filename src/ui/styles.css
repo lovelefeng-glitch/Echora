@@ -1643,3 +1643,15 @@ body {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
 }
+
+/* 消息底部 metrics 标签 */
+.msg-metric {
+  display: inline-block;
+  font-size: 10px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-right: 4px;
+  white-space: nowrap;
+}

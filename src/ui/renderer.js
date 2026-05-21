@@ -5,6 +5,11 @@
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
+// ========== 工具函数 ==========
+function escapeHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 // ========== 全局状态 ==========
 const STATE = {
   currentAgentKey: null,
@@ -527,8 +532,6 @@ async function loadModelInfo(agent) {
     const hint = document.getElementById('input-hint');
     if (hint) {
       let txt = `✅ ${agentObj.aiName} · 端口 ${agentObj.gatewayPort || '?'}`;
-      txt += ` · 模型 ${info.model}`;
-      if (info.contextWindow) txt += ` · ${(info.contextWindow/1000).toFixed(0)}K 上下文`;
       if (info.usagePct != null) txt += ` · 已用 ${info.usagePct}%`;
       hint.textContent = txt;
     }
@@ -596,7 +599,42 @@ function loadConvMessages(conv) {
     c.innerHTML = `<div class="empty-state" style="height:auto;padding-top:40px;"><div class="empty-icon">💬</div><h3>新会话已就绪</h3><p>输入消息开始对话</p></div>`;
     return;
   }
-  for (const msg of conv.messages) addMessage(msg.role, msg.content, null, false, msg.time);
+  for (const msg of conv.messages) {
+    const el = addMessage(msg.role, msg.content, null, false, msg.time);
+    // 恢复工具调用按钮
+    if (msg.tools && msg.tools.length > 0 && el) {
+      const leftEl = el.querySelector('.msg-footer-left');
+      if (leftEl) {
+        const toolBtn = document.createElement('button');
+        toolBtn.className = 'btn-tool-calls';
+        toolBtn.title = '查看工具调用详情';
+        toolBtn.textContent = `\uD83D\uDD27 ${msg.tools.length}`;
+        toolBtn.dataset.tools = JSON.stringify(msg.tools);
+        leftEl.appendChild(toolBtn);
+      }
+    }
+    // 恢复 metrics
+    if (msg.metrics && el) {
+      const rightEl = el.querySelector('.msg-footer-right');
+      if (rightEl) {
+        let metricsHtml = '';
+        const m = msg.metrics;
+        if (m.usage && m.usage.total_tokens > 0) {
+          const tok = m.usage.total_tokens >= 1000 ? (m.usage.total_tokens / 1000).toFixed(1) + 'K' : m.usage.total_tokens;
+          metricsHtml += `<span class="msg-metric" title="Prompt: ${m.usage.prompt_tokens} / Completion: ${m.usage.completion_tokens}">${tok} tokens</span>`;
+        }
+        if (m.latency) {
+          const sec = (m.latency / 1000).toFixed(1);
+          metricsHtml += `<span class="msg-metric">${sec}s</span>`;
+        }
+        if (m.firstChunkLatency) {
+          metricsHtml += `<span class="msg-metric" title="首 token 延迟">\u26A1${m.firstChunkLatency}ms</span>`;
+        }
+        const timeEl = rightEl.querySelector('.msg-time');
+        if (timeEl && metricsHtml) timeEl.insertAdjacentHTML('beforebegin', metricsHtml);
+      }
+    }
+  }
 }
 
 // ========== 视图切换 ==========
@@ -896,11 +934,30 @@ async function sendMessage() {
         const rightEl = msgEl.querySelector('.msg-footer-right');
         if (rightEl) {
           const timeStr = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-          rightEl.innerHTML = `<span class="msg-time">${timeStr}</span><button class="btn-copy-msg" title="复制">📋</button>`;
+          let metricsHtml = '';
+          if (data.metrics) {
+            const m = data.metrics;
+            if (m.usage && m.usage.total_tokens > 0) {
+              const tok = m.usage.total_tokens >= 1000 ? (m.usage.total_tokens / 1000).toFixed(1) + 'K' : m.usage.total_tokens;
+              metricsHtml += `<span class="msg-metric" title="Prompt: ${m.usage.prompt_tokens} / Completion: ${m.usage.completion_tokens}">${tok} tokens</span>`;
+            }
+            if (m.latency) {
+              const sec = (m.latency / 1000).toFixed(1);
+              metricsHtml += `<span class="msg-metric">${sec}s</span>`;
+            }
+            if (m.firstChunkLatency) {
+              metricsHtml += `<span class="msg-metric" title="首 token 延迟">⚡${m.firstChunkLatency}ms</span>`;
+            }
+          }
+          rightEl.innerHTML = `${metricsHtml}<span class="msg-time">${timeStr}</span><button class="btn-copy-msg" title="复制">📋</button>`;
+        }
+        // 持久化工具调用到消息
+        if (toolCallsReceived.length > 0 && msgEl) {
+          msgEl.dataset.tools = JSON.stringify(toolCallsReceived);
         }
       }
       const conv = getOrCreateConv(STATE.currentAgentKey);
-      conv.messages.push({ role: 'assistant', content: data.content, time: Date.now() });
+      conv.messages.push({ role: 'assistant', content: data.content, time: Date.now(), tools: toolCallsReceived.length > 0 ? toolCallsReceived : undefined, metrics: data.metrics || undefined });
       conv.updatedAt = Date.now();
       saveConversations();
       // 刷新模型信息
@@ -1389,7 +1446,8 @@ function bindEvents() {
     const list = overlay.querySelector('#tool-calls-list');
     list.innerHTML = tools.map(t => {
       const icon = t.status === 'completed' ? '✅' : t.status === 'error' ? '❌' : '⏳';
-      return `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">${icon} <strong>${t.name}</strong><div style="color:var(--text-secondary);font-size:12px;margin-top:2px;word-break:break-all;">${t.label || '(无详情)'}</div></div>`;
+      const args = t.arguments ? `<div style="color:var(--text-secondary);font-size:11px;margin-top:4px;background:var(--bg-secondary);padding:6px;border-radius:4px;word-break:break-all;max-height:120px;overflow-y:auto;"><code>${escapeHtml(typeof t.arguments === 'string' ? t.arguments : JSON.stringify(t.arguments, null, 2))}</code></div>` : '';
+      return `<div style="padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;">${icon} <strong>${escapeHtml(t.name)}</strong>${t.label ? ` <span style="color:var(--text-secondary);font-size:12px;">${escapeHtml(t.label)}</span>` : ''}${args}</div>`;
     }).join('');
   });
 

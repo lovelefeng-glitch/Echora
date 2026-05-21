@@ -494,10 +494,10 @@ function setupIPC() {
         onChunk: (delta, fullContent) => {
           send('gateway:messageChunk', { delta, content: fullContent });
         },
-        onDone: (fullContent, error) => {
+        onDone: (fullContent, error, metrics) => {
           activeStreams.delete(msgId);
           if (error) send('gateway:messageDone', { error: error.message || String(error) });
-          else send('gateway:messageDone', { content: fullContent });
+          else send('gateway:messageDone', { content: fullContent, metrics: metrics || null });
         },
         onError: (error) => {
           activeStreams.delete(msgId);

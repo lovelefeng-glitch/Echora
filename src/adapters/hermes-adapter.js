@@ -358,6 +358,12 @@ class HermesAdapter extends BaseAdapter {
   sendMessageStream(agentId, messages, callbacks, userId) {
     const { onChunk, onDone, onError, onToolCall } = callbacks || {};
 
+    // 计时 & 工具调用跟踪
+    this._streamStartTime = Date.now();
+    this._lastLatency = null;
+    this._lastToolCalls = [];
+    this._lastFirstChunkTime = null;
+
     let latestMessage;
     if (Array.isArray(messages)) {
       latestMessage = messages[messages.length - 1]?.content || '';
@@ -463,12 +469,14 @@ class HermesAdapter extends BaseAdapter {
             if (currentEvent === 'hermes.tool.progress' && onToolCall) {
               console.log('[HermesAdapter DEBUG] Received tool event:', JSON.stringify(parsed, null, 2));
               logAdapter('DEBUG', 'Hermes tool.progress', { tool: parsed.tool, label: parsed.label, status: parsed.status });
-              onToolCall({
+              const toolInfo = {
                 name: parsed.tool || parsed.name || 'unknown',
                 label: parsed.label || '',
                 status: parsed.status || 'running',
                 id: parsed.toolCallId || '',
-              });
+              };
+              this._lastToolCalls.push(toolInfo);
+              onToolCall(toolInfo);
               currentEvent = '';
               continue;
             }
@@ -508,7 +516,10 @@ class HermesAdapter extends BaseAdapter {
 
             // === 标准 OpenAI SSE 格式 ===
             const delta = parsed.choices?.[0]?.delta?.content || '';
-            if (delta) { fullContent += delta; if (onChunk) onChunk(delta, fullContent); }
+            if (delta) {
+              if (!this._lastFirstChunkTime) this._lastFirstChunkTime = Date.now();
+              fullContent += delta; if (onChunk) onChunk(delta, fullContent);
+            }
             const msg = parsed.choices?.[0]?.message?.content;
             if (msg) lastMessage = msg;
             // 捕获 usage（流式最后一个 chunk）
@@ -534,7 +545,20 @@ class HermesAdapter extends BaseAdapter {
       });
       res.on('end', () => {
         const finalContent = fullContent || lastMessage || '';
-        if (finalContent && onDone) onDone(finalContent);
+        this._lastLatency = Date.now() - (this._streamStartTime || Date.now());
+        const firstChunkLatency = this._lastFirstChunkTime ? this._lastFirstChunkTime - (this._streamStartTime || Date.now()) : null;
+        const metrics = {
+          usage: this._lastModelInfo ? {
+            prompt_tokens: this._lastModelInfo.promptTokens || 0,
+            completion_tokens: this._lastModelInfo.completionTokens || 0,
+            total_tokens: this._lastModelInfo.totalTokens || 0,
+          } : null,
+          latency: this._lastLatency,
+          firstChunkLatency,
+          toolCalls: this._lastToolCalls,
+          model: this._lastModelInfo?.model || null,
+        };
+        if (finalContent && onDone) onDone(finalContent, null, metrics);
       });
     });
     req.setTimeout(this._requestTimeout, () => { req.destroy(); if (onError) onError(new Error('请求超时')); });
