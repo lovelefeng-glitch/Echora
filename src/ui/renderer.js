@@ -850,15 +850,21 @@ async function sendMessage() {
       updateMessageContent(msgId, `⚠️ ${data.error}`);
     } else if (data.content) {
       if (msgEl) msgEl.classList.add('stream-done');
-      const rendered = typeof marked !== 'undefined' ? marked.parse(data.content) : data.content;
-      // 更新 msg-body 内容（保留 footer）
       const body = msgEl?.querySelector('.msg-body');
-      if (body) {
-        const footer = body.querySelector('.msg-footer-inline');
-        // 移除思考中文字
+      const footer = body?.querySelector('.msg-footer-inline');
+      const hasChunkContent = body && body.childNodes.length > 1 &&
+        !body.querySelector('.loading-dots');
+
+      if (hasChunkContent) {
+        // onChunk 已经填充了内容，不再重复插入
+        // 只确保 loading-dots 被移除
+        const loadingEl = body?.querySelector('.loading-dots');
+        if (loadingEl) loadingEl.remove();
+      } else if (body) {
+        // 没有 chunk 内容（比如工具调用后直接返回）
         const loadingEl = body.querySelector('.loading-dots');
         if (loadingEl) loadingEl.remove();
-        // 在 footer 之前插入渲染内容
+        const rendered = typeof marked !== 'undefined' ? marked.parse(data.content) : data.content;
         const temp = document.createElement('div');
         temp.innerHTML = rendered;
         while (temp.firstChild) {
@@ -866,6 +872,7 @@ async function sendMessage() {
           else body.appendChild(temp.firstChild);
         }
       }
+
       // 更新 footer 右侧时间戳 + 复制按钮
       if (msgEl) {
         msgEl.dataset.copyText = data.content;
@@ -909,7 +916,26 @@ function updateMessageContent(msgId, html) {
   const el = document.getElementById(msgId);
   if (!el) return;
   const body = el.querySelector('.msg-body');
-  if (body) body.innerHTML = html;
+  if (body) {
+    const footer = body.querySelector('.msg-footer-inline');
+    // 先移除旧的流式内容（保留 footer 和 loading-dots）
+    const children = Array.from(body.childNodes);
+    for (const child of children) {
+      if (child !== footer && !child.classList?.contains('loading-dots')) {
+        body.removeChild(child);
+      }
+    }
+    // 插入新内容（在 footer 之前）
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+    // 移除 loading-dots
+    const loadingEl = body.querySelector('.loading-dots');
+    if (loadingEl) loadingEl.remove();
+    while (temp.firstChild) {
+      if (footer) body.insertBefore(temp.firstChild, footer);
+      else body.appendChild(temp.firstChild);
+    }
+  }
   const container = document.getElementById('chat-messages');
   if (container && container.parentElement) {
     container.parentElement.scrollTop = container.parentElement.scrollHeight;
