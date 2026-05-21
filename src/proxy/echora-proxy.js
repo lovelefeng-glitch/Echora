@@ -21,7 +21,7 @@ const os = require('os');
 const { execSync } = require('child_process');
 
 // ========== 配置 ==========
-const PROXY_PORT = parseInt(process.argv.find((_, i, a) => a[i-1] === '--port') || '8084', 10);
+const PROXY_PORT = parseInt(process.argv.find((_, i, a) => a[i-1] === '--port') || '8085', 10);
 const UPSTREAM_URL = process.argv.find((_, i, a) => a[i-1] === '--upstream') || 'http://127.0.0.1:8083';
 const LOG_DIR = path.join(os.homedir(), 'AppData', 'Local', 'Echora', 'logs');
 

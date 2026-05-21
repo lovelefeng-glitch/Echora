@@ -258,7 +258,7 @@ function loadQclawConfig() {
 }
 
 // ---------- 端口查找 ----------
-const DEFAULT_PORTS = { qclaw: 28789, openclaw: 18789, hermes: 8084 };
+const DEFAULT_PORTS = { qclaw: 28789, openclaw: 18789, hermes: 8085 };
 
 function getGatewayPort(aiType) {
   const gw = gatewayManager.getAllStatus();
@@ -289,9 +289,9 @@ function getOrCreateAdapter(aiType, port) {
     adapter = new CursorAdapter({ aiType: 'cursor' });
   } else if (aiType === 'hermes') {
     adapter = new HermesAdapter({
-      port: 8084,  // 优先走代理（自动回退直连 8083）
+      port: 8085,  // 优先走代理（自动回退直连 8083）
       token: process.env.API_SERVER_KEY || '',
-      baseUrl: 'http://127.0.0.1:8084',
+      baseUrl: 'http://127.0.0.1:8085',
     });
   } else {
     adapter = new OpenClawAdapter({

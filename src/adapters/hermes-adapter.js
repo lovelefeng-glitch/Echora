@@ -25,7 +25,7 @@ const yaml = require('js-yaml');
 const os = require('os');
 
 // 优先连代理(8084)，不可用时回退直连Hermes(8083)
-const PROXY_PORT = 8084;
+const PROXY_PORT = 8085;
 const DIRECT_PORT = 8083;
 const DEFAULT_API_PORT = PROXY_PORT;  // 连接 Echora Proxy，不是直接连 Hermes
 const API_KEY = 'echora-shared-secret';
@@ -387,10 +387,12 @@ class HermesAdapter extends BaseAdapter {
       agentId,
       userId: userId || 'NONE',
       model,
+      baseUrl: this.baseUrl,
       bodyPreview: latestMessage.substring(0, 200),
     });
 
     const url = new URL(this.baseUrl);
+    logAdapter('DEBUG', 'sendMessageStream connecting', { host: url.hostname, port: url.port });
     const headers = {
       'Content-Type': 'application/json',
       'Content-Length': Buffer.byteLength(body),
