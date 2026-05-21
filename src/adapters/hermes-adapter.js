@@ -83,6 +83,7 @@ class HermesAdapter extends BaseAdapter {
     this._proc = spawn(hermesExe, args, {
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,  // 隐藏 Windows 终端窗口
     });
     this._proc.stdout?.on('data', d => console.log('[Hermes]', d.toString().trim()));
     this._proc.stderr?.on('data', d => console.warn('[Hermes]', d.toString().trim()));
@@ -102,12 +103,31 @@ class HermesAdapter extends BaseAdapter {
   }
 
   async stop() {
-    if (this._proc) { try { this._proc.kill('SIGTERM'); } catch (e) {} this._proc = null; }
+    // 1. 尝试杀子进程树（Echora 自己启动的）
+    if (this._proc) {
+      try {
+        // Windows: 用 taskkill /T 杀进程树，避免残留子进程
+        if (process.platform === 'win32' && this._proc.pid) {
+          execSync(`taskkill /T /F /PID ${this._proc.pid}`, { stdio: 'ignore' });
+        } else {
+          this._proc.kill('SIGTERM');
+        }
+      } catch (e) {}
+      this._proc = null;
+    }
+    // 2. 兜底：按端口查找并杀残留进程（防止多开）
     try {
       const netstat = execSync('netstat -ano', { encoding: 'utf-8', timeout: 3000 });
       for (const line of netstat.split('\n')) {
         const m = line.match(new RegExp(`TCP\\s+127\\.0\\.0\\.1:${this.apiPort}\\s+\\S+\\s+LISTENING\\s+(\\d+)`));
-        if (m) { execSync(`taskkill /PID ${m[1]} /F`, { stdio: 'ignore' }); break; }
+        if (m) {
+          const pid = parseInt(m[1], 10);
+          // 避免误杀：只杀 PID 不是当前 Echora 主进程的
+          if (pid && pid !== process.pid) {
+            execSync(`taskkill /T /F /PID ${pid}`, { stdio: 'ignore' });
+          }
+          break;
+        }
       }
     } catch (e) {}
     this.status = 'offline';
