@@ -458,8 +458,7 @@ class HermesAdapter extends BaseAdapter {
           if (!trimmed.startsWith('data: ')) continue;
           const payload = trimmed.slice(6).trim();
           if (payload === '[DONE]') {
-            const finalContent = fullContent || lastMessage || '';
-            if (onDone) onDone(finalContent);
+            // 不在这里调 onDone，让 res.on('end') 统一处理（带 metrics）
             return;
           }
           try {
