@@ -532,27 +532,15 @@ async function loadModelInfo(agent) {
     const hint = document.getElementById('input-hint');
     if (hint) {
       let txt = `✅ ${agentObj.aiName} · 端口 ${agentObj.gatewayPort || '?'}`;
+      if (info.model) txt += ` · ${info.model}`;
+      if (info.contextWindow) txt += ` · ${(info.contextWindow/1000).toFixed(0)}K`;
       if (info.usagePct != null) txt += ` · 已用 ${info.usagePct}%`;
       hint.textContent = txt;
     }
 
-    // 更新模型信息栏
-    const nameEl = document.getElementById('model-name');
-    const ctxEl = document.getElementById('model-context');
-    const usageEl = document.getElementById('model-usage');
+    // 隐藏旧的模型信息栏（信息已合并到 hint）
     const bar = document.getElementById('model-info-bar');
-    if (nameEl) nameEl.textContent = info.model || '--';
-    if (ctxEl) ctxEl.textContent = info.contextWindow ? `${(info.contextWindow/1000).toFixed(0)}K` : '--';
-    if (usageEl) {
-      if (info.usagePct != null) {
-        usageEl.textContent = `${info.usagePct}%`;
-        usageEl.className = 'model-usage' + (info.usagePct > 80 ? ' danger' : info.usagePct > 60 ? ' warn' : '');
-      } else {
-        usageEl.textContent = '--%';
-        usageEl.className = 'model-usage';
-      }
-    }
-    if (bar) bar.style.display = '';
+    if (bar) bar.style.display = 'none';
 
     // 填充模型选择器（保持用户上次选择）
     const selector = document.getElementById('model-selector');
@@ -1050,6 +1038,7 @@ function addMessage(role, text, msgId, save = true, timestamp) {
     }
     saveConversations();
   }
+  return msg;
 }
 
 // ========== 添加 AI 弹窗 ==========
@@ -1444,10 +1433,17 @@ function bindEvents() {
       overlay.querySelector('#close-tool-calls').addEventListener('click', () => overlay.remove());
     }
     const list = overlay.querySelector('#tool-calls-list');
+    const toolNameMap = { terminal: '终端命令', web_search: '网络搜索', read_file: '读取文件', write_file: '写入文件' };
     list.innerHTML = tools.map(t => {
       const icon = t.status === 'completed' ? '✅' : t.status === 'error' ? '❌' : '⏳';
-      const args = t.arguments ? `<div style="color:var(--text-secondary);font-size:11px;margin-top:4px;background:var(--bg-secondary);padding:6px;border-radius:4px;word-break:break-all;max-height:120px;overflow-y:auto;"><code>${escapeHtml(typeof t.arguments === 'string' ? t.arguments : JSON.stringify(t.arguments, null, 2))}</code></div>` : '';
-      return `<div style="padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;">${icon} <strong>${escapeHtml(t.name)}</strong>${t.label ? ` <span style="color:var(--text-secondary);font-size:12px;">${escapeHtml(t.label)}</span>` : ''}${args}</div>`;
+      const friendlyName = toolNameMap[t.name] || t.name;
+      // 解析 label：如果是命令，截断并格式化
+      let labelHtml = '';
+      if (t.label) {
+        const short = t.label.length > 120 ? t.label.substring(0, 120) + '...' : t.label;
+        labelHtml = `<div style="color:var(--text-secondary);font-size:11px;margin-top:4px;background:var(--bg-secondary);padding:6px;border-radius:4px;word-break:break-all;max-height:100px;overflow-y:auto;"><code>${escapeHtml(short)}</code></div>`;
+      }
+      return `<div style="padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;">${icon} <strong>${escapeHtml(friendlyName)}</strong>${labelHtml}</div>`;
     }).join('');
   });
 

@@ -496,7 +496,6 @@ function setupIPC() {
         },
         onDone: (fullContent, error, metrics) => {
           activeStreams.delete(msgId);
-          try { require('fs').appendFileSync('C:/Users/ohfen/AppData/Local/Echora/logs/debug-main.log', JSON.stringify({ t: new Date().toISOString(), msgId, hasContent: !!fullContent, hasMetrics: !!metrics, metrics }) + '\n'); } catch(e) {}
           if (error) send('gateway:messageDone', { error: error.message || String(error) });
           else send('gateway:messageDone', { content: fullContent, metrics: metrics || null });
         },
