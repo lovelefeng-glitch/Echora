@@ -251,11 +251,11 @@ server.listen(PROXY_PORT, '127.0.0.1', () => {
 
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
-    console.error(`[Echora Proxy] ❌ Port ${PROXY_PORT} already in use`);
+    console.error(`[Echora Proxy] Port ${PROXY_PORT} already in use, proxy disabled`);
   } else {
-    console.error(`[Echora Proxy] ❌ Error:`, err.message);
+    console.error(`[Echora Proxy] Error:`, err.message);
   }
-  process.exit(1);
+  // 不退出进程，Echora 可以在没有代理的情况下运行
 });
 
 module.exports = { server, PROXY_PORT, UPSTREAM_URL };

@@ -24,7 +24,10 @@ const net = require('net');
 const yaml = require('js-yaml');
 const os = require('os');
 
-const DEFAULT_API_PORT = 8084;  // 连接 Echora Proxy，不是直接连 Hermes
+// 优先连代理(8084)，不可用时回退直连Hermes(8083)
+const PROXY_PORT = 8084;
+const DIRECT_PORT = 8083;
+const DEFAULT_API_PORT = PROXY_PORT;  // 连接 Echora Proxy，不是直接连 Hermes
 const API_KEY = 'echora-shared-secret';
 
 class HermesAdapter extends BaseAdapter {

@@ -736,6 +736,9 @@ app.whenReady().then(async () => {
 
   // 启动 Echora Proxy（中间层，捕获 token 用量等指标）
   try {
+    proxyServer.on('error', (err) => {
+      console.warn('[Echora] Proxy error:', err.message, '— proxy disabled');
+    });
     proxyServer.listen(PROXY_PORT_NUM, '127.0.0.1', () => {
       console.log('[Echora] Proxy started on port %d', PROXY_PORT_NUM);
     });
