@@ -735,12 +735,8 @@ function createStreamMessage(msgId) {
   const msg = document.createElement('div');
   msg.className = 'message assistant stream-thinking';
   msg.id = msgId;
-  msg.innerHTML = '<div class="msg-avatar">🤖</div><div class="msg-body"><span class="loading-dots">⏳ 思考中...</span></div>';
-  // 预创建 footer（工具按钮左，时间右）
-  const footer = document.createElement('div');
-  footer.className = 'msg-footer-inline';
-  footer.innerHTML = '<div class="msg-footer-left"></div><div class="msg-footer-right"></div>';
-  msg.appendChild(footer);
+  // footer 在 msg-body 内部（和 addMessage 保持一致）
+  msg.innerHTML = '<div class="msg-avatar">🤖</div><div class="msg-body"><span class="loading-dots">⏳ 思考中...</span><div class="msg-footer-inline"><div class="msg-footer-left"></div><div class="msg-footer-right"></div></div></div>';
   container.appendChild(msg);
   container.parentElement.scrollTop = container.parentElement.scrollHeight;
   return msg;
@@ -855,9 +851,21 @@ async function sendMessage() {
     } else if (data.content) {
       if (msgEl) msgEl.classList.add('stream-done');
       const rendered = typeof marked !== 'undefined' ? marked.parse(data.content) : data.content;
-      // 内容更新（不含 footer，footer 在 msg-body 外面）
+      // 更新 msg-body 内容（保留 footer）
       const body = msgEl?.querySelector('.msg-body');
-      if (body) body.innerHTML = rendered;
+      if (body) {
+        const footer = body.querySelector('.msg-footer-inline');
+        // 移除思考中文字
+        const loadingEl = body.querySelector('.loading-dots');
+        if (loadingEl) loadingEl.remove();
+        // 在 footer 之前插入渲染内容
+        const temp = document.createElement('div');
+        temp.innerHTML = rendered;
+        while (temp.firstChild) {
+          if (footer) body.insertBefore(temp.firstChild, footer);
+          else body.appendChild(temp.firstChild);
+        }
+      }
       // 更新 footer 右侧时间戳 + 复制按钮
       if (msgEl) {
         msgEl.dataset.copyText = data.content;
