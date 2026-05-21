@@ -796,14 +796,20 @@ async function sendMessage() {
       if (msgEl) msgEl.classList.add('stream-done');
       const rendered = typeof marked !== 'undefined' ? marked.parse(data.content) : data.content;
       updateMessageContent(msgId, rendered);
-      // 添加完成标记
+      // 添加复制按钮 + 完成标记
       if (msgEl) {
+        msgEl.dataset.rawText = data.content;
         const body = msgEl.querySelector('.msg-body');
         if (body) {
           const doneMark = document.createElement('span');
           doneMark.className = 'stream-done-mark';
           doneMark.textContent = '✓';
           body.appendChild(doneMark);
+          const copyBtn = document.createElement('button');
+          copyBtn.className = 'btn-copy-msg';
+          copyBtn.title = '复制';
+          copyBtn.textContent = '📋';
+          body.appendChild(copyBtn);
         }
       }
       const conv = getOrCreateConv(STATE.currentAgentKey);
@@ -857,7 +863,10 @@ function addMessage(role, text, msgId, save = true) {
   const rendered = (role === 'assistant' && typeof marked !== 'undefined')
     ? marked.parse(text)
     : text;
-  msg.innerHTML = `<div class="msg-avatar">${avatarIcon}</div><div class="msg-body">${rendered}</div>`;
+  const copyBtn = role === 'assistant' ? '<button class="btn-copy-msg" title="复制">📋</button>' : '';
+  msg.innerHTML = `<div class="msg-avatar">${avatarIcon}</div><div class="msg-body">${rendered}${copyBtn}</div>`;
+  // 存原始文本用于复制
+  if (role === 'assistant') msg.dataset.rawText = text;
   container.appendChild(msg);
   container.parentElement.scrollTop = container.parentElement.scrollHeight;
 
@@ -1247,6 +1256,20 @@ async function discoverConfigs() {
 
 // ========== 事件绑定 ==========
 function bindEvents() {
+  // 消息复制按钮（事件委托）
+  document.getElementById('chat-messages')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.btn-copy-msg');
+    if (!btn) return;
+    const msg = btn.closest('.message');
+    const rawText = msg?.dataset.rawText || msg?.querySelector('.msg-body')?.textContent || '';
+    if (rawText) {
+      navigator.clipboard.writeText(rawText).then(() => {
+        btn.textContent = '✅';
+        setTimeout(() => { btn.textContent = '📋'; }, 1500);
+      }).catch(() => {});
+    }
+  });
+
   document.getElementById('btn-done').addEventListener('click', loadMainUI);
   document.getElementById('btn-rescan').addEventListener('click', async () => {
     const c1 = document.getElementById('env-check-list'); const c2 = document.getElementById('ai-detect-list');
