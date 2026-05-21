@@ -9,6 +9,14 @@ const $$ = (sel) => document.querySelectorAll(sel);
 function escapeHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+function setHintText(txt) {
+  const hint = document.getElementById('input-hint');
+  if (!hint) return;
+  const sel = hint.querySelector('#model-selector');
+  hint.textContent = '';
+  hint.appendChild(document.createTextNode(txt));
+  if (sel) hint.appendChild(sel);
+}
 
 // ========== 全局状态 ==========
 const STATE = {
@@ -494,12 +502,14 @@ async function selectAgent(agent) {
   if (running) {
     input.disabled = false;
     input.placeholder = `与 ${agent.agentName} 对话...`;
-    hint.textContent = `✅ ${agent.aiName} · 端口 ${agent.aiType === 'hermes' ? 8085 : (agent.gatewayPort || '?')}`;
+    const sel = hint.querySelector('#model-selector');
+    setHintText(`✅ ${agent.aiName} · 端口 ${agent.aiType === 'hermes' ? 8085 : (agent.gatewayPort || '?')}`);
+    if (sel) hint.appendChild(sel);
     btn.disabled = false;
   } else {
     input.disabled = true;
     input.placeholder = `${agent.aiName} 未运行...`;
-    hint.textContent = agent.aiType === 'cursor' ? '⚠️ Cursor 不支持外部 API' : '⚠️ 网关未启动';
+    setHintText(agent.aiType === 'cursor' ? '⚠️ Cursor 不支持外部 API' : '⚠️ 网关未启动');
     btn.disabled = true;
   }
 
@@ -531,20 +541,20 @@ async function loadModelInfo(agent) {
     if (!info || !info.model) return;
     const hint = document.getElementById('input-hint');
     if (hint) {
+      // 先清空文本节点，保留 selector
+      const selector = hint.querySelector('#model-selector');
+      setHintText('');
       let txt = `✅ ${agentObj.aiName} · 端口 ${agentObj.aiType === 'hermes' ? 8085 : (agentObj.gatewayPort || '?')}`;
       if (info.model) txt += ` · ${info.model}`;
       if (info.contextWindow) txt += ` · ${(info.contextWindow/1000).toFixed(0)}K`;
       if (info.usagePct != null) txt += ` · 已用 ${info.usagePct}%`;
-      hint.textContent = txt;
+      hint.appendChild(document.createTextNode(txt));
+      if (selector) hint.appendChild(selector);
     }
-
-    // 隐藏旧的模型信息栏（信息已合并到 hint）
-    const bar = document.getElementById('model-info-bar');
-    if (bar) bar.style.display = 'none';
 
     // 填充模型选择器（保持用户上次选择）
     const selector = document.getElementById('model-selector');
-    if (selector && bar) {
+    if (selector) {
       const models = await window.echora.agent.listModels(agentObj.aiType);
       if (models && models.length > 1) {
         selector.innerHTML = '';
@@ -557,7 +567,6 @@ async function loadModelInfo(agent) {
         }
         if (STATE.selectedModel) selector.value = STATE.selectedModel;
         selector.style.display = '';
-        bar.style.display = '';
       }
     }
   } catch (e) { /* 忽略 */ }
@@ -1594,7 +1603,7 @@ function bindEvents() {
       modelSelector.disabled = true;
       if (chatInput) chatInput.disabled = true;
       if (sendBtn) sendBtn.disabled = true;
-      if (hint) hint.textContent = `🔄 正在切换模型至 ${modelName}...`;
+      if (hint) setHintText(`🔄 正在切换模型至 ${modelName}...`);
 
       try {
         const result = await window.echora.agent.setModel(agent.aiType, modelId);
@@ -1602,7 +1611,7 @@ function bindEvents() {
 
         if (result && result.needsRestart) {
           // Hermes 等需要重启的适配器：显示加载动画，等待 Gateway 恢复
-          if (hint) hint.textContent = `🔄 ${result.message || 'Gateway 重启中，请稍候...'}`;
+          if (hint) setHintText(`🔄 ${result.message || 'Gateway 重启中，请稍候...'}`);
           // 轮询状态直到恢复
           let retries = 0;
           const maxRetries = 30; // 最多等 30 秒
@@ -1612,24 +1621,24 @@ function bindEvents() {
               const status = await window.echora.agent.modelInfo(agent.aiType);
               if (status && status.model) {
                 // Gateway 已恢复
-                if (hint) hint.textContent = `✅ 已切换至 ${modelName}`;
+                if (hint) setHintText(`✅ 已切换至 ${modelName}`);
                 break;
               }
             } catch (e) { /* 等待 */ }
             retries++;
             if (retries % 5 === 0 && hint) {
-              hint.textContent = `🔄 Gateway 重启中... (${retries}s)`;
+              setHintText(`🔄 Gateway 重启中... (${retries}s)`);
             }
           }
           if (retries >= maxRetries) {
-            if (hint) hint.textContent = `⚠️ 切换超时，请检查 Hermes 状态`;
+            if (hint) setHintText(`⚠️ 切换超时，请检查 Hermes 状态`);
           }
         } else {
           // 无需重启的适配器（QClaw 等）：直接生效
-          if (hint) hint.textContent = `✅ 已切换至 ${modelName}`;
+          if (hint) setHintText(`✅ 已切换至 ${modelName}`);
         }
       } catch (e) {
-        if (hint) hint.textContent = `⚠️ 切换失败: ${e.message}`;
+        if (hint) setHintText(`⚠️ 切换失败: ${e.message}`);
       } finally {
         // 恢复输入
         modelSelector.disabled = false;
