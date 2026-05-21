@@ -795,16 +795,11 @@ async function sendMessage() {
     } else if (data.content) {
       if (msgEl) msgEl.classList.add('stream-done');
       const rendered = typeof marked !== 'undefined' ? marked.parse(data.content) : data.content;
-      updateMessageContent(msgId, rendered);
-      // 存储复制文本 + 添加底部操作栏（气泡下方）
-      if (msgEl) {
-        msgEl.dataset.copyText = data.content;
-        const timeStr = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-        const footer = document.createElement('div');
-        footer.className = 'msg-footer assistant';
-        footer.innerHTML = `<span class="msg-time">${timeStr}</span><div class="msg-actions"><button class="btn-copy-msg" title="复制">📋</button></div>`;
-        msgEl.after(footer);
-      }
+      // 内容 + 时间戳 + 复制按钮，全部在气泡内
+      const timeStr = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+      const bodyHtml = rendered + `<div class="msg-footer-inline"><span class="msg-time">${timeStr}</span><button class="btn-copy-msg" title="复制">📋</button></div>`;
+      updateMessageContent(msgId, bodyHtml);
+      if (msgEl) msgEl.dataset.copyText = data.content;
       const conv = getOrCreateConv(STATE.currentAgentKey);
       conv.messages.push({ role: 'assistant', content: data.content, time: Date.now() });
       conv.updatedAt = Date.now();
@@ -856,22 +851,16 @@ function addMessage(role, text, msgId, save = true, timestamp) {
   const rendered = (role === 'assistant' && typeof marked !== 'undefined')
     ? marked.parse(text)
     : text;
-  msg.innerHTML = `<div class="msg-avatar">${avatarIcon}</div><div class="msg-body">${rendered}</div>`;
-  // 存储用于复制的文本
-  if (role === 'assistant') msg.dataset.copyText = text;
-  container.appendChild(msg);
-  // 底部操作栏（气泡下方，兄弟节点）
+  // 时间戳 + 复制按钮（放在气泡内底部右对齐）
   const timeStr = timestamp
     ? new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
     : new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-  const footer = document.createElement('div');
-  footer.className = `msg-footer ${role}`;
-  if (role === 'assistant') {
-    footer.innerHTML = `<span class="msg-time">${timeStr}</span><div class="msg-actions"><button class="btn-copy-msg" title="复制">📋</button></div>`;
-  } else {
-    footer.innerHTML = `<span class="msg-time">${timeStr}</span>`;
-  }
-  container.appendChild(footer);
+  const copyBtn = role === 'assistant'
+    ? `<button class="btn-copy-msg" title="复制">📋</button>`
+    : '';
+  msg.innerHTML = `<div class="msg-avatar">${avatarIcon}</div><div class="msg-body">${rendered}<div class="msg-footer-inline"><span class="msg-time">${timeStr}</span>${copyBtn}</div></div>`;
+  if (role === 'assistant') msg.dataset.copyText = text;
+  container.appendChild(msg);
   container.parentElement.scrollTop = container.parentElement.scrollHeight;
 
   if (save && STATE.currentAgentKey) {
