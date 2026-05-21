@@ -334,6 +334,32 @@ body {
 .stream-cursor { animation: blink 0.8s step-end infinite; color: var(--accent); }
 @keyframes blink { 50% { opacity: 0; } }
 
+/* ===== 流式状态指示 ===== */
+.message.stream-thinking .msg-body {
+  border-left: 3px solid var(--accent);
+  animation: stream-pulse 1.5s ease-in-out infinite;
+}
+.message.stream-active .msg-body {
+  border-left: 3px solid var(--success, #4caf50);
+}
+.message.stream-done .msg-body {
+  border-left: 3px solid transparent;
+}
+.message.stream-error .msg-body {
+  border-left: 3px solid var(--error, #f44336);
+}
+@keyframes stream-pulse {
+  0%, 100% { border-left-color: var(--accent); }
+  50% { border-left-color: transparent; }
+}
+.stream-done-mark {
+  display: inline-block;
+  margin-left: 8px;
+  color: var(--success, #4caf50);
+  font-size: 12px;
+  opacity: 0.7;
+}
+
 /* ===== 主内容区 ===== */
 .main-content {
   flex: 1;

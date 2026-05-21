@@ -729,7 +729,7 @@ function createStreamMessage(msgId) {
   const empty = container.querySelector('.empty-state');
   if (empty) empty.remove();
   const msg = document.createElement('div');
-  msg.className = 'message assistant';
+  msg.className = 'message assistant stream-thinking';
   msg.id = msgId;
   msg.innerHTML = '<div class="msg-avatar">🤖</div><div class="msg-body"><span class="loading-dots">⏳ 思考中...</span></div>';
   container.appendChild(msg);
@@ -752,6 +752,11 @@ async function sendMessage() {
 
   const timeout = (STATE.settings?.timeoutPerAI?.[agent.aiType]) || (STATE.settings?.timeout) || 120000;
   const safetyTimer = setTimeout(() => {
+    const msgEl = document.getElementById(msgId);
+    if (msgEl) {
+      msgEl.classList.remove('stream-thinking', 'stream-active');
+      msgEl.classList.add('stream-error');
+    }
     updateMessageContent(msgId, `⏱️ 请求超时 (${Math.round(timeout/1000)}s)`);
     if (_chunkCleanup) _chunkCleanup();
     if (_doneCleanup) _doneCleanup();
@@ -763,6 +768,12 @@ async function sendMessage() {
   _chunkCleanup = window.echora.onStream.onChunk((data) => {
     if (data.msgId !== msgId) return;
     clearTimeout(safetyTimer);
+    // 从 thinking 切换到 streaming 状态
+    const msgEl = document.getElementById(msgId);
+    if (msgEl) {
+      msgEl.classList.remove('stream-thinking');
+      msgEl.classList.add('stream-active');
+    }
     const rendered = typeof marked !== 'undefined' ? marked.parse(data.content) : data.content;
     updateMessageContent(msgId, rendered);
   });
@@ -773,11 +784,28 @@ async function sendMessage() {
     if (_chunkCleanup) _chunkCleanup();
     if (_doneCleanup) _doneCleanup();
 
+    const msgEl = document.getElementById(msgId);
+    if (msgEl) {
+      msgEl.classList.remove('stream-thinking', 'stream-active');
+    }
+
     if (data.error) {
+      if (msgEl) msgEl.classList.add('stream-error');
       updateMessageContent(msgId, `⚠️ ${data.error}`);
     } else if (data.content) {
+      if (msgEl) msgEl.classList.add('stream-done');
       const rendered = typeof marked !== 'undefined' ? marked.parse(data.content) : data.content;
       updateMessageContent(msgId, rendered);
+      // 添加完成标记
+      if (msgEl) {
+        const body = msgEl.querySelector('.msg-body');
+        if (body) {
+          const doneMark = document.createElement('span');
+          doneMark.className = 'stream-done-mark';
+          doneMark.textContent = '✓';
+          body.appendChild(doneMark);
+        }
+      }
       const conv = getOrCreateConv(STATE.currentAgentKey);
       conv.messages.push({ role: 'assistant', content: data.content, time: Date.now() });
       conv.updatedAt = Date.now();
@@ -785,6 +813,7 @@ async function sendMessage() {
       // 刷新模型信息
       loadModelInfo();
     } else {
+      if (msgEl) msgEl.classList.add('stream-error');
       updateMessageContent(msgId, '⚠️ 空响应');
     }
   });
@@ -796,6 +825,11 @@ async function sendMessage() {
     clearTimeout(safetyTimer);
     if (_chunkCleanup) _chunkCleanup();
     if (_doneCleanup) _doneCleanup();
+    const msgEl = document.getElementById(msgId);
+    if (msgEl) {
+      msgEl.classList.remove('stream-thinking', 'stream-active');
+      msgEl.classList.add('stream-error');
+    }
     updateMessageContent(msgId, `⚠️ 发送失败: ${e.message}`);
   }
 }
