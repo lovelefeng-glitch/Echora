@@ -423,6 +423,7 @@ class HermesAdapter extends BaseAdapter {
       }
 
       let buffer = '';
+      let lastMessage = null;  // 保存最后一个完整 message（工具调用后可能在这里）
       res.on('data', (chunk) => {
         buffer += chunk.toString();
         const lines = buffer.split('\n');
@@ -432,18 +433,25 @@ class HermesAdapter extends BaseAdapter {
           if (!trimmed.startsWith('data: ')) continue;
           const payload = trimmed.slice(6).trim();
           if (payload === '[DONE]') {
-            if (onDone) onDone(fullContent);
+            // 优先用 fullContent，其次用 lastMessage（工具调用后的最终回复）
+            const finalContent = fullContent || lastMessage || '';
+            if (onDone) onDone(finalContent);
             return;
           }
           try {
             const parsed = JSON.parse(payload);
+            // 捕获 delta.content（普通流式）
             const delta = parsed.choices?.[0]?.delta?.content || '';
             if (delta) { fullContent += delta; if (onChunk) onChunk(delta, fullContent); }
+            // 捕获完整 message（工具调用后的最终回复可能在这里）
+            const msg = parsed.choices?.[0]?.message?.content;
+            if (msg) lastMessage = msg;
           } catch (e) {}
         }
       });
       res.on('end', () => {
-        if (fullContent && onDone) onDone(fullContent);
+        const finalContent = fullContent || lastMessage || '';
+        if (finalContent && onDone) onDone(finalContent);
       });
     });
     req.setTimeout(this._requestTimeout, () => { req.destroy(); if (onError) onError(new Error('请求超时')); });
