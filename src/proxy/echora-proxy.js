@@ -18,11 +18,35 @@ const url = require('url');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { execSync } = require('child_process');
 
 // ========== 配置 ==========
 const PROXY_PORT = parseInt(process.argv.find((_, i, a) => a[i-1] === '--port') || '8084', 10);
 const UPSTREAM_URL = process.argv.find((_, i, a) => a[i-1] === '--upstream') || 'http://127.0.0.1:8083';
 const LOG_DIR = path.join(os.homedir(), 'AppData', 'Local', 'Echora', 'logs');
+
+// ========== 端口清理 ==========
+function killPortProcess(port) {
+  try {
+    const netstat = execSync('netstat -ano', { encoding: 'utf-8', timeout: 3000 });
+    for (const line of netstat.split('\n')) {
+      const m = line.match(new RegExp(`TCP\\s+127\\.0\\.0\\.1:${port}\\s+\\S+\\s+LISTENING\\s+(\\d+)`));
+      if (m) {
+        const pid = parseInt(m[1], 10);
+        // 安全校验：只杀指定端口的 PID，不杀自己和 Echora 主进程
+        if (pid && pid !== process.pid) {
+          try {
+            execSync(`taskkill /PID ${pid}`, { stdio: 'ignore' });
+            log('INFO', `Killed stale process on port ${port}`, { pid });
+            return true;
+          } catch (e) { /* taskkill 失败，跳过 */ }
+        }
+      }
+    }
+  } catch (e) {}
+  return false;
+}
+
 
 // ========== 日志 ==========
 if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
