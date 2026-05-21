@@ -736,6 +736,11 @@ function createStreamMessage(msgId) {
   msg.className = 'message assistant stream-thinking';
   msg.id = msgId;
   msg.innerHTML = '<div class="msg-avatar">🤖</div><div class="msg-body"><span class="loading-dots">⏳ 思考中...</span></div>';
+  // 预创建 footer（工具按钮左，时间右）
+  const footer = document.createElement('div');
+  footer.className = 'msg-footer-inline';
+  footer.innerHTML = '<div class="msg-footer-left"></div><div class="msg-footer-right"></div>';
+  msg.appendChild(footer);
   container.appendChild(msg);
   container.parentElement.scrollTop = container.parentElement.scrollHeight;
   return msg;
@@ -809,23 +814,19 @@ async function sendMessage() {
   const toolCleanup = window.echora.onStream.onToolCall((data) => {
     if (data.msgId !== msgId) return;
     toolCallsReceived.push(data);
-    // 更新 footer 中的工具按钮（不在气泡内）
     const msgEl = document.getElementById(msgId);
     if (msgEl) {
-      let toolBtn = msgEl.querySelector('.btn-tool-calls');
-      if (!toolBtn) {
-        // 找到 footer 区域插入按钮
-        const actionsEl = msgEl.querySelector('.msg-actions');
-        if (actionsEl) {
+      // 更新 footer 左侧的工具按钮
+      let leftEl = msgEl.querySelector('.msg-footer-left');
+      if (leftEl) {
+        let toolBtn = leftEl.querySelector('.btn-tool-calls');
+        if (!toolBtn) {
           toolBtn = document.createElement('button');
           toolBtn.className = 'btn-tool-calls';
           toolBtn.title = '查看工具调用详情';
-          actionsEl.prepend(toolBtn);
+          leftEl.appendChild(toolBtn);
         }
-      }
-      if (toolBtn) {
-        const count = toolCallsReceived.length;
-        toolBtn.textContent = `🔧 ${count}`;
+        toolBtn.textContent = `🔧 ${toolCallsReceived.length}`;
         toolBtn.dataset.tools = JSON.stringify(toolCallsReceived.map(t => ({
           name: t.name || t.tool || '',
           label: t.label || '',
@@ -854,11 +855,18 @@ async function sendMessage() {
     } else if (data.content) {
       if (msgEl) msgEl.classList.add('stream-done');
       const rendered = typeof marked !== 'undefined' ? marked.parse(data.content) : data.content;
-      // 内容 + 时间戳 + 复制按钮，全部在气泡内
-      const timeStr = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-      const bodyHtml = rendered + `<div class="msg-footer-inline"><span class="msg-time">${timeStr}</span><button class="btn-copy-msg" title="复制">📋</button></div>`;
-      updateMessageContent(msgId, bodyHtml);
-      if (msgEl) msgEl.dataset.copyText = data.content;
+      // 内容更新（不含 footer，footer 在 msg-body 外面）
+      const body = msgEl?.querySelector('.msg-body');
+      if (body) body.innerHTML = rendered;
+      // 更新 footer 右侧时间戳 + 复制按钮
+      if (msgEl) {
+        msgEl.dataset.copyText = data.content;
+        const rightEl = msgEl.querySelector('.msg-footer-right');
+        if (rightEl) {
+          const timeStr = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+          rightEl.innerHTML = `<span class="msg-time">${timeStr}</span><button class="btn-copy-msg" title="复制">📋</button>`;
+        }
+      }
       const conv = getOrCreateConv(STATE.currentAgentKey);
       conv.messages.push({ role: 'assistant', content: data.content, time: Date.now() });
       conv.updatedAt = Date.now();
@@ -919,7 +927,7 @@ function addMessage(role, text, msgId, save = true, timestamp) {
   const copyBtn = role === 'assistant'
     ? `<button class="btn-copy-msg" title="复制">📋</button>`
     : '';
-  msg.innerHTML = `<div class="msg-avatar">${avatarIcon}</div><div class="msg-body">${rendered}<div class="msg-footer-inline"><span class="msg-time">${timeStr}</span>${copyBtn}</div></div>`;
+  msg.innerHTML = `<div class="msg-avatar">${avatarIcon}</div><div class="msg-body">${rendered}<div class="msg-footer-inline"><div class="msg-footer-left"></div><div class="msg-footer-right"><span class="msg-time">${timeStr}</span>${copyBtn}</div></div></div>`;
   if (role === 'assistant') msg.dataset.copyText = text;
   container.appendChild(msg);
   container.parentElement.scrollTop = container.parentElement.scrollHeight;
