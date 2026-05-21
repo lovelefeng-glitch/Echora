@@ -19,6 +19,7 @@ const { createAPIServer } = require('./src/api-server');
 
 // ---------- 全局状态 ----------
 let mainWindow = null;
+let activeStreams = new Map();  // msgId → HTTP request (用于 abort)
 let tray = null;
 let isQuitting = false;
 let configManager = null;
@@ -487,20 +488,33 @@ function setupIPC() {
       }
     };
     try {
-      adapter.sendMessageStream(agentId || 'main', text, {
+      const req = adapter.sendMessageStream(agentId || 'main', text, {
         onChunk: (delta, fullContent) => {
           send('gateway:messageChunk', { delta, content: fullContent });
         },
         onDone: (fullContent, error) => {
+          activeStreams.delete(msgId);
           if (error) send('gateway:messageDone', { error: error.message || String(error) });
           else send('gateway:messageDone', { content: fullContent });
         },
         onError: (error) => {
+          activeStreams.delete(msgId);
           send('gateway:messageDone', { error: error.message || String(error) });
         }
       }, userId);
+      // 保存引用用于 abort
+      if (req) activeStreams.set(msgId, req);
     } catch (e) {
       send('gateway:messageDone', { error: e.message });
+    }
+  });
+
+  // 停止生成
+  ipcMain.on('message:abortStream', (event, { msgId }) => {
+    const req = msgId ? activeStreams.get(msgId) : null;
+    if (req) {
+      try { req.destroy(); } catch (e) {}
+      activeStreams.delete(msgId);
     }
   });
 

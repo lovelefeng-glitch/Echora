@@ -747,6 +747,25 @@ async function sendMessage() {
   document.getElementById('chat-input').value = '';
   document.getElementById('chat-input').style.height = 'auto';
 
+  // 流式开始：显示停止按钮，隐藏发送按钮
+  const btnSend = document.getElementById('btn-send');
+  const btnStop = document.getElementById('btn-stop');
+  const chatInput = document.getElementById('chat-input');
+  if (btnSend) btnSend.classList.add('hidden');
+  if (btnStop) btnStop.classList.remove('hidden');
+  if (chatInput) chatInput.disabled = true;
+  STATE.streamingMsgId = msgId;
+
+  function restoreSendButton() {
+    const bs = document.getElementById('btn-send');
+    const bst = document.getElementById('btn-stop');
+    const ci = document.getElementById('chat-input');
+    if (bs) bs.classList.remove('hidden');
+    if (bst) bst.classList.add('hidden');
+    if (ci) ci.disabled = false;
+    STATE.streamingMsgId = null;
+  }
+
   const msgId = 'msg-stream-' + Date.now() + '-' + Math.random().toString(36).slice(2,6);
   createStreamMessage(msgId);
 
@@ -758,6 +777,7 @@ async function sendMessage() {
       msgEl.classList.add('stream-error');
     }
     updateMessageContent(msgId, `⏱️ 请求超时 (${Math.round(timeout/1000)}s)`);
+    restoreSendButton();
     if (_chunkCleanup) _chunkCleanup();
     if (_doneCleanup) _doneCleanup();
   }, timeout);
@@ -781,6 +801,7 @@ async function sendMessage() {
   _doneCleanup = window.echora.onStream.onDone((data) => {
     if (data.msgId !== msgId) return;
     clearTimeout(safetyTimer);
+    restoreSendButton();
     if (_chunkCleanup) _chunkCleanup();
     if (_doneCleanup) _doneCleanup();
 
@@ -817,6 +838,7 @@ async function sendMessage() {
     window.echora.message.sendStream(agent.aiType, agent.agentId, text, conv.userId, msgId);
   } catch (e) {
     clearTimeout(safetyTimer);
+    restoreSendButton();
     if (_chunkCleanup) _chunkCleanup();
     if (_doneCleanup) _doneCleanup();
     const msgEl = document.getElementById(msgId);
@@ -1249,6 +1271,13 @@ async function discoverConfigs() {
 
 // ========== 事件绑定 ==========
 function bindEvents() {
+  // 停止生成按钮
+  document.getElementById('btn-stop')?.addEventListener('click', () => {
+    if (STATE.streamingMsgId) {
+      window.echora.message.abortStream(STATE.streamingMsgId);
+    }
+  });
+
   // 消息复制按钮（事件委托）
   document.getElementById('chat-messages')?.addEventListener('click', (e) => {
     const btn = e.target.closest('.btn-copy-msg');

@@ -112,6 +112,9 @@ contextBridge.exposeInMainWorld('echora', {
     sendStream: (aiType, agentId, text, userId, msgId) =>
       ipcRenderer.send('message:sendStream', { aiType, agentId, text, userId, msgId }),
 
+    abortStream: (msgId) =>
+      ipcRenderer.send('message:abortStream', { msgId }),
+
     status: (aiType) =>
       ipcRenderer.invoke('message:status', aiType),
   },
