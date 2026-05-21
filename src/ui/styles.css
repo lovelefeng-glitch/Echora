@@ -872,6 +872,9 @@ body {
   color: var(--text-hint);
   margin-bottom: 6px;
   min-height: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .input-row {

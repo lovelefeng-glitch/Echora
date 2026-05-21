@@ -494,7 +494,7 @@ async function selectAgent(agent) {
   if (running) {
     input.disabled = false;
     input.placeholder = `与 ${agent.agentName} 对话...`;
-    hint.textContent = `✅ ${agent.aiName} · 端口 ${agent.gatewayPort || '?'}`;
+    hint.textContent = `✅ ${agent.aiName} · 端口 ${agent.aiType === 'hermes' ? 8085 : (agent.gatewayPort || '?')}`;
     btn.disabled = false;
   } else {
     input.disabled = true;
@@ -531,7 +531,7 @@ async function loadModelInfo(agent) {
     if (!info || !info.model) return;
     const hint = document.getElementById('input-hint');
     if (hint) {
-      let txt = `✅ ${agentObj.aiName} · 端口 ${agentObj.gatewayPort || '?'}`;
+      let txt = `✅ ${agentObj.aiName} · 端口 ${agentObj.aiType === 'hermes' ? 8085 : (agentObj.gatewayPort || '?')}`;
       if (info.model) txt += ` · ${info.model}`;
       if (info.contextWindow) txt += ` · ${(info.contextWindow/1000).toFixed(0)}K`;
       if (info.usagePct != null) txt += ` · 已用 ${info.usagePct}%`;
@@ -607,16 +607,13 @@ function loadConvMessages(conv) {
       if (rightEl) {
         let metricsHtml = '';
         const m = msg.metrics;
-        if (m.usage && m.usage.total_tokens > 0) {
-          const tok = m.usage.total_tokens >= 1000 ? (m.usage.total_tokens / 1000).toFixed(1) + 'K' : m.usage.total_tokens;
-          metricsHtml += `<span class="msg-metric" title="Prompt: ${m.usage.prompt_tokens} / Completion: ${m.usage.completion_tokens}">${tok} tokens</span>`;
+        if (m.usage && m.usage.completion_tokens > 0) {
+          const tok = m.usage.completion_tokens;
+          metricsHtml += `<span class="msg-metric" title="Prompt: ${m.usage.prompt_tokens} / Completion: ${tok}">${tok} tokens</span>`;
         }
         if (m.latency) {
           const sec = (m.latency / 1000).toFixed(1);
           metricsHtml += `<span class="msg-metric">${sec}s</span>`;
-        }
-        if (m.firstChunkLatency) {
-          metricsHtml += `<span class="msg-metric" title="首 token 延迟">\u26A1${m.firstChunkLatency}ms</span>`;
         }
         const timeEl = rightEl.querySelector('.msg-time');
         if (timeEl && metricsHtml) timeEl.insertAdjacentHTML('beforebegin', metricsHtml);
@@ -925,16 +922,14 @@ async function sendMessage() {
           let metricsHtml = '';
           if (data.metrics) {
             const m = data.metrics;
-            if (m.usage && m.usage.total_tokens > 0) {
-              const tok = m.usage.total_tokens >= 1000 ? (m.usage.total_tokens / 1000).toFixed(1) + 'K' : m.usage.total_tokens;
-              metricsHtml += `<span class="msg-metric" title="Prompt: ${m.usage.prompt_tokens} / Completion: ${m.usage.completion_tokens}">${tok} tokens</span>`;
+            // 只显示 completion_tokens（本次消耗），prompt_tokens 是上下文已在 hint 栏显示
+            if (m.usage && m.usage.completion_tokens > 0) {
+              const tok = m.usage.completion_tokens;
+              metricsHtml += `<span class="msg-metric" title="Prompt: ${m.usage.prompt_tokens} / Completion: ${tok}">${tok} tokens</span>`;
             }
             if (m.latency) {
               const sec = (m.latency / 1000).toFixed(1);
               metricsHtml += `<span class="msg-metric">${sec}s</span>`;
-            }
-            if (m.firstChunkLatency) {
-              metricsHtml += `<span class="msg-metric" title="首 token 延迟">⚡${m.firstChunkLatency}ms</span>`;
             }
           }
           rightEl.innerHTML = `${metricsHtml}<span class="msg-time">${timeStr}</span><button class="btn-copy-msg" title="复制">📋</button>`;
