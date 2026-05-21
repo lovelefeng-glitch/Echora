@@ -36,7 +36,7 @@ function killPortProcess(port) {
         // 安全校验：只杀指定端口的 PID，不杀自己和 Echora 主进程
         if (pid && pid !== process.pid) {
           try {
-            execSync(`taskkill /PID ${pid}`, { stdio: 'ignore' });
+            execSync(`taskkill /F /PID ${pid}`, { stdio: 'ignore' });
             log('INFO', `Killed stale process on port ${port}`, { pid });
             return true;
           } catch (e) { /* taskkill 失败，跳过 */ }
