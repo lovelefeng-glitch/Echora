@@ -734,17 +734,8 @@ app.whenReady().then(async () => {
   // 🔒 端口冲突检测：避免多开
   await checkPortConflict(18790);
 
-  // 启动 Echora Proxy（中间层，捕获 token 用量等指标）
-  try {
-    proxyServer.on('error', (err) => {
-      console.warn('[Echora] Proxy error:', err.message, '— proxy disabled');
-    });
-    proxyServer.listen(PROXY_PORT_NUM, '127.0.0.1', () => {
-      console.log('[Echora] Proxy started on port %d', PROXY_PORT_NUM);
-    });
-  } catch (e) {
-    console.warn('[Echora] Proxy start failed:', e.message);
-  }
+  // Echora Proxy 已在 require 时自动启动（src/proxy/echora-proxy.js）
+  // 端口被占时自动清理旧进程再重试，失败则优雅降级
 
   gatewayManager = new GatewayManager();
   loadQclawConfig();
