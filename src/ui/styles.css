@@ -354,15 +354,13 @@ body {
   50% { border-left-color: transparent; }
 }
 
-/* 消息底部操作栏（气泡外） */
+/* 消息底部操作栏（气泡内） */
 .msg-footer {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 4px;
-  padding: 0 42px;
-  min-height: 20px;
 }
 .msg-time {
   font-size: 10px;
