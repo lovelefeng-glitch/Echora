@@ -480,7 +480,11 @@ async function selectAgent(agent) {
   const running = agent.status === 'running';
   const input = document.getElementById('chat-input');
   const btn = document.getElementById('btn-send');
+  const btnStop = document.getElementById('btn-stop');
   const hint = document.getElementById('input-hint');
+
+  // 切换 Agent 时：如果流式属于其他会话，隐藏停止按钮
+  if (btnStop) btnStop.classList.add('hidden');
 
   if (running) {
     input.disabled = false;
@@ -1309,6 +1313,9 @@ function bindEvents() {
   // 会话选择器
   const convSel = document.getElementById('conv-selector');
   convSel.addEventListener('change', () => {
+    // 切换会话时隐藏停止按钮
+    const btnStop = document.getElementById('btn-stop');
+    if (btnStop) btnStop.classList.add('hidden');
     const val = convSel.value;
     if (val === '__new__') {
       const conv = createNewConv(STATE.currentAgentKey);
@@ -1321,6 +1328,9 @@ function bindEvents() {
   });
   document.getElementById('btn-new-conv').addEventListener('click', () => {
     if (!STATE.currentAgentKey) return;
+    // 新建会话时隐藏停止按钮
+    const btnStop = document.getElementById('btn-stop');
+    if (btnStop) btnStop.classList.add('hidden');
     const conv = createNewConv(STATE.currentAgentKey);
     refreshConvSelector(STATE.currentAgentKey);
     loadConvMessages(conv);

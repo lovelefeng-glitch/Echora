@@ -934,7 +934,6 @@ body {
   justify-content: center;
   transition: background 0.15s;
   flex-shrink: 0;
-  animation: pulse 1.2s infinite;
 }
 .btn-stop:hover { background: #d32f2f; }
 
