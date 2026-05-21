@@ -454,8 +454,9 @@ class HermesAdapter extends BaseAdapter {
           try {
             const parsed = JSON.parse(payload);
 
-            // === Hermes 自定义事件 ===
+// === Hermes 自定义事件 ===
             if (currentEvent === 'hermes.tool.progress' && onToolCall) {
+              console.log('[HermesAdapter DEBUG] Received tool event:', JSON.stringify(parsed, null, 2));
               logAdapter('DEBUG', 'Hermes tool.progress', { tool: parsed.tool, label: parsed.label, status: parsed.status });
               onToolCall({
                 name: parsed.tool || parsed.name || 'unknown',
@@ -477,6 +478,15 @@ class HermesAdapter extends BaseAdapter {
             if (delta) { fullContent += delta; if (onChunk) onChunk(delta, fullContent); }
             const msg = parsed.choices?.[0]?.message?.content;
             if (msg) lastMessage = msg;
+            // 捕获 usage（流式最后一个 chunk）
+            if (parsed.usage) {
+              this._lastModelInfo = {
+                model: parsed.model || this._lastModelInfo?.model || null,
+                promptTokens: parsed.usage.prompt_tokens || 0,
+                completionTokens: parsed.usage.completion_tokens || 0,
+                totalTokens: parsed.usage.total_tokens || 0,
+              };
+            }
             // 标准 tool_calls（非 Hermes 适配器可能用这个）
             const toolCalls = parsed.choices?.[0]?.delta?.tool_calls;
             if (Array.isArray(toolCalls) && onToolCall) {

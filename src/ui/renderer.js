@@ -531,10 +531,28 @@ async function loadModelInfo(agent) {
       if (info.contextWindow) txt += ` · ${(info.contextWindow/1000).toFixed(0)}K 上下文`;
       if (info.usagePct != null) txt += ` · 已用 ${info.usagePct}%`;
       hint.textContent = txt;
+    }
+
+    // 更新模型信息栏
+    const nameEl = document.getElementById('model-name');
+    const ctxEl = document.getElementById('model-context');
+    const usageEl = document.getElementById('model-usage');
+    const bar = document.getElementById('model-info-bar');
+    if (nameEl) nameEl.textContent = info.model || '--';
+    if (ctxEl) ctxEl.textContent = info.contextWindow ? `${(info.contextWindow/1000).toFixed(0)}K` : '--';
+    if (usageEl) {
+      if (info.usagePct != null) {
+        usageEl.textContent = `${info.usagePct}%`;
+        usageEl.className = 'model-usage' + (info.usagePct > 80 ? ' danger' : info.usagePct > 60 ? ' warn' : '');
+      } else {
+        usageEl.textContent = '--%';
+        usageEl.className = 'model-usage';
+      }
+    }
+    if (bar) bar.style.display = '';
 
     // 填充模型选择器（保持用户上次选择）
     const selector = document.getElementById('model-selector');
-    const bar = document.getElementById('model-info-bar');
     if (selector && bar) {
       const models = await window.echora.agent.listModels(agentObj.aiType);
       if (models && models.length > 1) {
@@ -550,7 +568,6 @@ async function loadModelInfo(agent) {
         selector.style.display = '';
         bar.style.display = '';
       }
-    }
     }
   } catch (e) { /* 忽略 */ }
 }
