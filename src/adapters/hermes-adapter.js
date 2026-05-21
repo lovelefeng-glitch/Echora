@@ -467,6 +467,20 @@ class HermesAdapter extends BaseAdapter {
               currentEvent = '';
               continue;
             }
+            // Hermes token 用量事件
+            if (currentEvent === 'hermes.token_usage') {
+              logAdapter('DEBUG', 'Hermes token_usage', parsed);
+              if (parsed.prompt || parsed.prompt_tokens) {
+                this._lastModelInfo = {
+                  model: this._lastModelInfo?.model || null,
+                  promptTokens: parsed.prompt || parsed.prompt_tokens || 0,
+                  completionTokens: parsed.completion || parsed.completion_tokens || 0,
+                  totalTokens: parsed.total || parsed.total_tokens || 0,
+                };
+              }
+              currentEvent = '';
+              continue;
+            }
             // 忽略其他 hermes.* 事件
             if (currentEvent.startsWith('hermes.')) {
               currentEvent = '';
@@ -561,7 +575,7 @@ class HermesAdapter extends BaseAdapter {
 
     // 2) 尝试从缓存获取 usage
     if (this._lastModelInfo) {
-      contextUsed = this._lastModelInfo.promptTokens || null;
+      contextUsed = this._lastModelInfo.promptTokens > 0 ? this._lastModelInfo.promptTokens : null;
       if (!modelName && this._lastModelInfo.model) modelName = this._lastModelInfo.model;
     }
 
@@ -576,7 +590,7 @@ class HermesAdapter extends BaseAdapter {
     }
 
     // 4) 计算占用比例
-    if (contextUsed && contextWindow) {
+    if (contextUsed > 0 && contextWindow > 0) {
       usagePct = Math.round((contextUsed / contextWindow) * 100 * 10) / 10;
     }
 
