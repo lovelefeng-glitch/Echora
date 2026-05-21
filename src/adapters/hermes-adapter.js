@@ -532,11 +532,13 @@ class HermesAdapter extends BaseAdapter {
           name: defaultModel.split('/').pop(),
           isDefault: true,
           source: 'config',
+          base_url: m?.base_url || '',
+          api_key: m?.api_key || '',
         });
       }
     }
 
-    // 1.5) 从 custom_providers 解析所有可用模型
+    // 1.5) 从 custom_providers 解析所有可用模型（带连接信息）
     try {
       const providers = this._hermesConfig?.custom_providers;
       if (Array.isArray(providers)) {
@@ -552,6 +554,8 @@ class HermesAdapter extends BaseAdapter {
                   isDefault: false,
                   source: 'custom_provider',
                   provider: p.name || '',
+                  base_url: p.base_url || '',
+                  api_key: p.api_key || '',
                 });
               }
             }
@@ -565,6 +569,8 @@ class HermesAdapter extends BaseAdapter {
               isDefault: false,
               source: 'custom_provider',
               provider: p.name || '',
+              base_url: p.base_url || '',
+              api_key: p.api_key || '',
             });
           }
         }
@@ -656,14 +662,43 @@ class HermesAdapter extends BaseAdapter {
       return { success: false, needsRestart: false, message: '配置文件解析失败: ' + e.message };
     }
 
-    // 2. 更新 model.default
+    // 2. 查找目标模型所属的 provider，获取 base_url + api_key
     if (!config.model) config.model = {};
     const oldModel = config.model.default;
     const newModel = modelId || config.model.main || 'deepseek-ai/deepseek-v4-pro';
+    let newBaseUrl = null;
+    let newApiKey = null;
+
+    // 从 custom_providers 查找匹配的 provider
+    const providers = config.custom_providers;
+    if (Array.isArray(providers)) {
+      for (const p of providers) {
+        // 检查 models 字典
+        if (p.models && typeof p.models === 'object' && p.models[newModel]) {
+          newBaseUrl = p.base_url || null;
+          newApiKey = p.api_key || null;
+          break;
+        }
+        // 检查单模型字段
+        if (p.model === newModel) {
+          newBaseUrl = p.base_url || null;
+          newApiKey = p.api_key || null;
+          break;
+        }
+      }
+    }
+
+    // 更新 config.model 的所有字段
     config.model.default = newModel;
+    if (newBaseUrl) config.model.base_url = newBaseUrl;
+    if (newApiKey) config.model.api_key = newApiKey;
     this._currentModel = modelId || null;
 
-    logAdapter('INFO', 'switchModel: updating config.yaml', { oldModel, newModel });
+    logAdapter('INFO', 'switchModel: updating config.yaml', {
+      oldModel, newModel,
+      base_url: newBaseUrl || '(unchanged)',
+      hasApiKey: !!newApiKey,
+    });
 
     // 3. 写回配置（保留 YAML 格式）
     try {
