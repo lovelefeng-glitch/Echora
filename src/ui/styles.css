@@ -939,6 +939,20 @@ body {
 
 .hidden { display: none !important; }
 
+/* 工具调用指示 */
+.tool-call-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 193, 7, 0.12);
+  color: #ffc107;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  margin-bottom: 6px;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
 /* ===== 按钮 ===== */
 .btn {
   padding: 6px 14px;

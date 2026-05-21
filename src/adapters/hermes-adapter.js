@@ -353,7 +353,7 @@ class HermesAdapter extends BaseAdapter {
   }
 
   sendMessageStream(agentId, messages, callbacks, userId) {
-    const { onChunk, onDone, onError } = callbacks || {};
+    const { onChunk, onDone, onError, onToolCall } = callbacks || {};
 
     let latestMessage;
     if (Array.isArray(messages)) {
@@ -446,6 +446,20 @@ class HermesAdapter extends BaseAdapter {
             // 捕获完整 message（工具调用后的最终回复可能在这里）
             const msg = parsed.choices?.[0]?.message?.content;
             if (msg) lastMessage = msg;
+            // 捕获 tool_calls（工具调用信息）
+            const toolCalls = parsed.choices?.[0]?.delta?.tool_calls;
+            if (Array.isArray(toolCalls) && onToolCall) {
+              for (const tc of toolCalls) {
+                if (tc.function?.name) {
+                  onToolCall({
+                    name: tc.function.name,
+                    arguments: tc.function.arguments || '',
+                    id: tc.id || '',
+                    index: tc.index ?? 0,
+                  });
+                }
+              }
+            }
           } catch (e) {}
         }
       });

@@ -500,6 +500,9 @@ function setupIPC() {
         onError: (error) => {
           activeStreams.delete(msgId);
           send('gateway:messageDone', { error: error.message || String(error) });
+        },
+        onToolCall: (toolInfo) => {
+          send('gateway:messageToolCall', toolInfo);
         }
       }, userId);
       // 保存引用用于 abort

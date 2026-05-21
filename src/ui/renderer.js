@@ -785,6 +785,7 @@ async function sendMessage() {
     restoreSendButton();
     if (_chunkCleanup) _chunkCleanup();
     if (_doneCleanup) _doneCleanup();
+    if (toolCleanup) toolCleanup();
   }, timeout);
 
   if (_chunkCleanup) _chunkCleanup();
@@ -803,12 +804,35 @@ async function sendMessage() {
     updateMessageContent(msgId, rendered);
   });
 
+  // 工具调用事件
+  let toolCallsReceived = [];
+  const toolCleanup = window.echora.onStream.onToolCall((data) => {
+    if (data.msgId !== msgId) return;
+    toolCallsReceived.push(data);
+    // 显示工具调用状态
+    const msgEl = document.getElementById(msgId);
+    if (msgEl) {
+      const toolNames = [...new Set(toolCallsReceived.map(t => t.name))];
+      const body = msgEl.querySelector('.msg-body');
+      if (body) {
+        const toolHtml = `<div class="tool-call-indicator">🔧 ${toolNames.join(', ')}</div>`;
+        // 如果已有内容（不是思考中），追加工具调用指示
+        if (body.querySelector('.tool-call-indicator')) {
+          body.querySelector('.tool-call-indicator').textContent = `🔧 ${toolNames.join(', ')}`;
+        } else {
+          body.insertAdjacentHTML('afterbegin', toolHtml);
+        }
+      }
+    }
+  });
+
   _doneCleanup = window.echora.onStream.onDone((data) => {
     if (data.msgId !== msgId) return;
     clearTimeout(safetyTimer);
     restoreSendButton();
     if (_chunkCleanup) _chunkCleanup();
     if (_doneCleanup) _doneCleanup();
+    if (toolCleanup) toolCleanup();
 
     const msgEl = document.getElementById(msgId);
     if (msgEl) {
@@ -846,6 +870,7 @@ async function sendMessage() {
     restoreSendButton();
     if (_chunkCleanup) _chunkCleanup();
     if (_doneCleanup) _doneCleanup();
+    if (toolCleanup) toolCleanup();
     const msgEl = document.getElementById(msgId);
     if (msgEl) {
       msgEl.classList.remove('stream-thinking', 'stream-active');
@@ -1280,6 +1305,14 @@ function bindEvents() {
   document.getElementById('btn-stop')?.addEventListener('click', () => {
     if (STATE.streamingMsgId) {
       window.echora.message.abortStream(STATE.streamingMsgId);
+      // 直接恢复 UI，不依赖回调（回调可能不触发）
+      const bs = document.getElementById('btn-send');
+      const bst = document.getElementById('btn-stop');
+      const ci = document.getElementById('chat-input');
+      if (bs) bs.classList.remove('hidden');
+      if (bst) bst.classList.add('hidden');
+      if (ci) ci.disabled = false;
+      STATE.streamingMsgId = null;
     }
   });
 

@@ -31,7 +31,7 @@
 | P0-4 | 🐛 抽屉菜单图标被遮挡（底部菜单项图标不完整 / 被截断） | ui | ✅ 已验证：max-height 320px + 2列grid 载7项无溢出 |
 | P0-5 | 流式闪烁光标改思考中动画 | ui | ✅ 已完成 |
 
-| P0-6 | 🐛 流式输出无法辨别状态：运行中 / 已完成 / 报错停止 | ui + adapters | 📅 |
+| P0-6 | 🐛 流式输出无法辨别状态：运行中 / 已完成 / 报错停止 | ui + adapters | ✅ 2026-05-21 |
 ### 优先级 P1 — 核心功能
 
 | # | 任务 | 模块 | 标记 |
@@ -81,7 +81,7 @@
 | P2-6 | 引入 Markdown 渲染（marked 代码高亮） | ui | ✅ 2026-05-20 |
 | P2-7 | [F-9] 设置页面重构：二级菜单（左侧 AI 软件按钮 / 右侧对应配置数据） | ui | 📅 |
 
-| P2-8 | 📋 消息复制按钮：每条 AI 回复底部 + 顶部提供一键复制 | ui | 📅 |
+| P2-8 | 📋 消息复制按钮：每条 AI 回复底部 + 顶部提供一键复制 | ui | ✅ 2026-05-21 |
 > **P2-7 设计要点：**
 > - 当前：所有 AI 配置堆在一个长页面 → 后期 AI 多了会无限拉长
 > - 改为**二级菜单布局**：左侧是大块配置数据区，右侧是竖排 AI 软件图标按钮（窄栏）
@@ -106,8 +106,9 @@
 |---|------|------|------|
 | P1-27 | [F-8] Hermes profile Agent 端到端：检测→状态→启动→对话 | adapters + detectors + ui | 📅 |
 
-| P1-28 | 🛑 停止生成按钮：前端发送中断信号（Hermes Ctrl+C 等价操作） | ui + main + adapters | 📅 |
+| P1-28 | 🛑 停止生成按钮：前端发送中断信号（Hermes Ctrl+C 等价操作） | ui + main + adapters | ✅ 2026-05-21 |
 | P1-29 | 🔀 不同 AI 软件差异化会话窗口：Hermes 模型切换绑新建会话 / QClaw 不暴露模型列表 | ui + adapters | 🔧 |
+| P1-30 | 🔧 实时显示模型正在调用的工具/Skill（解析 SSE tool_calls delta，流式中展示工具名+参数） | adapters + ui | 📅 |
 > **P1-27 子任务拆解：**
 > 1. AIDetector 识别 profiles 目录下的 agent → 渲染为独立 Agent 卡片（带 profile 名称）
 > 2. Profile Agent 未运行时：灰色灯 + 点击聊天区显示「▶️ 启动 minmin」（而非当前「Agent 未启动」通用提示）
@@ -250,3 +251,9 @@ S-1 message:sendStream IPC → S-2 renderer 流式渲染 → S-3 hermes adapter 
 
 | 2026-05-21 | 新增 4 任务: P0-6(流式状态检测) P1-28(停止生成) P1-29(差异化会话窗口) P2-8(复制按钮) | QClaw |
 | 2026-05-21 | P1-29 差异化模型切换: base-adapter switchModel() + hermes-adapter config.yaml改写+Gateway重启 + renderer加载动画+输入禁用 | 小雪 |
+| 2026-05-21 | P1-29 fix: switchModel 同时切换 base_url+api_key，listModels 返回完整 provider 连接信息 | 小雪 |
+| 2026-05-21 | P1-29 fix: windowsHide 隐藏终端窗口 + taskkill /T 进程树清理 + 切换后立即刷新绿灯 | 小雪 |
+| 2026-05-21 | P0-6 流式状态辨别: stream-thinking/active/done/error 四态 + 左侧光条动画 | 小雪 |
+| 2026-05-21 | P2-8 消息复制按钮: hover显示📋 + clipboard写入 + ✅反馈 + 事件委托 | 小雪 |
+| 2026-05-21 | fix: 工具调用内容丢失(SSE lastMessage捕获) + 绿色光条box-shadow + 复制按钮移到气泡外 + 渲染复制 | 小雪 |
+| 2026-05-21 | fix: 复制按钮+时间戳移到气泡内部 + 历史消息时间戳持久化 | 小雪 |

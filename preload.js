@@ -133,6 +133,12 @@ contextBridge.exposeInMainWorld('echora', {
       ipcRenderer.on('gateway:messageDone', handler);
       return () => ipcRenderer.removeListener('gateway:messageDone', handler);
     },
+    // 收到工具调用信息
+    onToolCall: (callback) => {
+      const handler = (event, data) => callback(data);
+      ipcRenderer.on('gateway:messageToolCall', handler);
+      return () => ipcRenderer.removeListener('gateway:messageToolCall', handler);
+    },
   },
 
   // ===== 启动事件 =====
