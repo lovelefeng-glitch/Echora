@@ -443,13 +443,27 @@ function setupIPC() {
       const adapter = adapters.get(aiType);
       if (!adapter) return { success: false, needsRestart: false, message: '适配器未找到' };
       // 优先使用 switchModel（差异化逻辑），fallback 到 setModel
+      let result;
       if (typeof adapter.switchModel === 'function') {
-        return await adapter.switchModel(modelId);
+        result = await adapter.switchModel(modelId);
       } else if (typeof adapter.setModel === 'function') {
-        const result = adapter.setModel(modelId);
-        return { ...result, needsRestart: false };
+        const r = adapter.setModel(modelId);
+        result = { ...r, needsRestart: false };
+      } else {
+        return { success: false, needsRestart: false };
       }
-      return { success: false, needsRestart: false };
+      // Gateway 重启后立即通知前端刷新状态（不等 10s 轮询）
+      if (result.needsRestart && result.success) {
+        try {
+          const status = await adapter.getStatus();
+          safeSend('gateway:statusChange', {
+            aiType,
+            status: status.status || 'running',
+            port: adapter.apiPort || 8083,
+          });
+        } catch (e) { /* ignore */ }
+      }
+      return result;
     } catch (e) {
       return { success: false, needsRestart: false, error: e.message };
     }
