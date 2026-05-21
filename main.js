@@ -273,13 +273,14 @@ function getOrCreateAdapter(aiType, port) {
   const finalPort = realPort || DEFAULT_PORTS[aiType] || qclawPort;
   const baseUrl = `http://127.0.0.1:${finalPort}`;
 
-  // 已有适配器但端口变了 → 更新
+  // 已有适配器 — Hermes 强制更新为代理端口（跳过端口嗅探）
   if (adapters.has(aiType)) {
     const existing = adapters.get(aiType);
-    if (existing.baseUrl !== baseUrl) {
-      existing.baseUrl = baseUrl;
-      existing.config.port = finalPort;
-      console.log('[Echora] Adapter %s port updated: %d', aiType, finalPort);
+    const targetUrl = aiType === 'hermes' ? 'http://127.0.0.1:8085' : baseUrl;
+    if (existing.baseUrl !== targetUrl) {
+      existing.baseUrl = targetUrl;
+      existing.apiPort = aiType === 'hermes' ? 8085 : finalPort;
+      console.log('[Echora] Adapter %s port updated: %s', aiType, targetUrl);
     }
     return existing;
   }
