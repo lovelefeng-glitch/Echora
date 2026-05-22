@@ -173,48 +173,100 @@ const ConfigReader = {
     }
 
     const result = {
+      gateway: {},
       agents: [],
       models: [],
+      session: {},
+      tools: {},
+      browser: {},
       port: null,
     };
 
-    if (!rawData || typeof rawData !== 'object') {
-      return result;
-    }
+    if (!rawData || typeof rawData !== 'object') return result;
 
     try {
-      // 提取 agents
-      if (rawData.agents && Array.isArray(rawData.agents.list)) {
-        result.agents = rawData.agents.list.map(agent => ({
-          id: agent.id || '',
-          name: agent.name || agent.id || '',
-          model: agent.model || undefined,
+      // === Gateway ===
+      if (rawData.gateway) {
+        const gw = rawData.gateway;
+        result.gateway = {
+          port: gw.port || null,
+          mode: gw.mode || null,
+          bind: gw.bind || null,
+          authMode: gw.auth?.mode || null,
+          httpEnabled: gw.http?.endpoints?.chatCompletions?.enabled ?? null,
+          controlUiAllowInsecure: gw.controlUi?.allowInsecureAuth ?? null,
+          tailscaleMode: gw.tailscale?.mode || null,
+        };
+        result.port = gw.port || null;
+      }
+
+      // === Agents ===
+      if (rawData.agents?.list) {
+        result.agents = rawData.agents.list.map(a => ({
+          id: a.id || '',
+          name: a.identity?.name || a.name || a.id || '',
+          emoji: a.identity?.emoji || null,
+          workspace: a.workspace || null,
+          modelPrimary: a.model?.primary || null,
+          modelFallbacks: a.model?.fallbacks || [],
+          reasoningDefault: a.reasoningDefault || null,
+          skills: a.skills || [],
+          timeoutSeconds: a.timeoutSeconds || null,
+          maxConcurrent: a.maxConcurrent || null,
         }));
       }
 
-      // 提取 models（过滤敏感字段）
-      // providers 可能是对象 { name: {...} } 或数组 [{...}]
-      if (rawData.models && rawData.models.providers) {
+      // === Models ===
+      if (rawData.models?.providers) {
         const providers = rawData.models.providers;
-        const providerEntries = Array.isArray(providers)
+        const entries = Array.isArray(providers)
           ? providers.map((p, i) => [p.provider || p.name || `provider-${i}`, p])
           : Object.entries(providers);
-        result.models = providerEntries.map(([key, provider]) => {
-          const safeProvider = filterSensitive(provider);
-          return {
-            provider: key,
-            base_url: safeProvider.base_url || safeProvider.baseUrl || '',
-            models: safeProvider.models || [],
-          };
-        });
+        result.models = entries.map(([key, provider]) => ({
+          provider: key,
+          baseUrl: provider.base_url || provider.baseUrl || '',
+          api: provider.api || null,
+          models: (provider.models || []).map(m => ({
+            id: m.id || '',
+            name: m.name || m.id || '',
+            contextWindow: m.contextWindow || null,
+            maxTokens: m.maxTokens || null,
+            input: m.input || [],
+            reasoning: m.reasoning ?? null,
+            cost: m.cost || null,
+            // 完整路径 = providerId/modelId
+            fullPath: `${key}/${m.id}`,
+          })),
+        }));
       }
 
-      // 提取 port
-      if (rawData.gateway && typeof rawData.gateway.port === 'number') {
-        result.port = rawData.gateway.port;
+      // === Session ===
+      if (rawData.session) {
+        result.session = {
+          resetMode: rawData.session.resetMode || null,
+          dmScope: rawData.session.dmScope || null,
+          maxHistory: rawData.session.maxHistory || null,
+        };
+      }
+
+      // === Tools ===
+      if (rawData.tools) {
+        result.tools = {
+          allowBash: rawData.tools.allowBash ?? null,
+          allowNetwork: rawData.tools.allowNetwork ?? null,
+          toolTimeout: rawData.tools.timeout || null,
+        };
+      }
+
+      // === Browser ===
+      if (rawData.browser) {
+        result.browser = {
+          enabled: rawData.browser.enabled ?? null,
+          engine: rawData.browser.engine || null,
+        };
       }
     } catch (e) {
-      console.warn(`[ConfigReader] normalize 异常:`, e.message);
+      console.warn('[ConfigReader] normalize 异常:', e.message);
     }
 
     return result;
@@ -228,75 +280,147 @@ const ConfigReader = {
    */
   normalizeHermes(rawData) {
     const result = {
+      model: {},
+      agent: {},
+      memory: {},
+      compression: {},
+      delegation: {},
+      browser: {},
+      security: {},
+      display: {},
+      approvals: {},
+      sessions: {},
+      cron: {},
+      toolsets: {},
+      apiServer: {},
       agents: [],
       models: [],
-      port: null,
       profiles: [],
-      apiServerEnabled: false,
+      port: null,
     };
 
-    if (!rawData || typeof rawData !== 'object') {
-      return result;
-    }
+    if (!rawData || typeof rawData !== 'object') return result;
 
     try {
-      // 提取 agents（Hermes 的 agents 可能在不同位置）
       const safeData = filterSensitive(rawData);
 
-      // Hermes agent 定义：agents 列表或单个 agent 配置
-      if (safeData.agents && Array.isArray(safeData.agents)) {
-        result.agents = safeData.agents.map((a, i) => ({
-          id: a.id || a.name || `hermes-agent-${i}`,
-          name: a.name || a.id || `Agent ${i + 1}`,
-          model: a.model || undefined,
-        }));
-      } else if (safeData.agent) {
-        result.agents.push({
-          id: safeData.agent.id || 'hermes-default',
-          name: safeData.agent.name || 'Hermes Agent',
-          model: safeData.agent.model || undefined,
-        });
+      // === Model ===
+      if (safeData.model) {
+        result.model = {
+          default: safeData.model.default || null,
+          main: safeData.model.main || null,
+          maxTokens: safeData.model.max_tokens || null,
+          temperature: safeData.model.temperature || null,
+          topP: safeData.model.top_p || null,
+        };
       }
 
-      // 提取 models / provider 信息
-      if (safeData.models && Array.isArray(safeData.models)) {
-        result.models = safeData.models.map(m => ({
-          provider: m.provider || m.name || 'unknown',
-          model: m.model || m.id || '',
-        }));
-      } else if (safeData.model || safeData.provider) {
-        result.models.push({
-          provider: safeData.provider || 'default',
-          model: safeData.model || '',
-        });
+      // === Agent ===
+      if (safeData.agent) {
+        result.agent = {
+          maxTurns: safeData.agent.max_turns || null,
+          gatewayTimeout: safeData.agent.gateway_timeout || null,
+          reasoningEffort: safeData.agent.reasoning_effort || null,
+        };
       }
 
-      // 提取 API server 配置
-      if (safeData.api_server || safeData.apiServer) {
-        const apiServer = safeData.api_server || safeData.apiServer;
-        result.port = apiServer.port || 8642;
-        result.apiServerEnabled = apiServer.enabled === true || apiServer.enabled === 'true';
-      } else {
-        result.port = 8642; // 默认端口
+      // === Memory ===
+      if (safeData.memory) {
+        result.memory = {
+          enabled: safeData.memory.enabled ?? null,
+          backend: safeData.memory.backend || null,
+          maxEntries: safeData.memory.max_entries || null,
+        };
       }
 
-      // 也检查环境变量
-      if (process.env.API_SERVER_ENABLED === 'true') {
-        result.apiServerEnabled = true;
-      }
-      if (process.env.API_SERVER_PORT) {
-        result.port = parseInt(process.env.API_SERVER_PORT) || 8642;
+      // === Compression ===
+      if (safeData.compression) {
+        result.compression = {
+          enabled: safeData.compression.enabled ?? null,
+          windowSize: safeData.compression.window_size || null,
+          truncateMode: safeData.compression.truncate_mode || null,
+        };
       }
 
-      // Profiles 列表
+      // === Delegation ===
+      if (safeData.delegation) {
+        result.delegation = {
+          enabled: safeData.delegation.enabled ?? null,
+          agents: safeData.delegation.agents || [],
+        };
+      }
+
+      // === Browser ===
+      if (safeData.browser) {
+        result.browser = {
+          engine: safeData.browser.engine || null,
+          path: safeData.browser.path || null,
+        };
+      }
+
+      // === Security ===
+      if (safeData.security) {
+        result.security = {
+          sandbox: safeData.security.sandbox ?? null,
+          approvalMode: safeData.security.approval_mode || null,
+        };
+      }
+
+      // === Display ===
+      if (safeData.display) {
+        result.display = {
+          language: safeData.display.language || null,
+          theme: safeData.display.theme || null,
+        };
+      }
+
+      // === Approvals ===
+      if (safeData.approvals) {
+        result.approvals = {
+          mode: safeData.approvals.mode || null,
+          autoApprove: safeData.approvals.auto_approve ?? null,
+        };
+      }
+
+      // === Sessions ===
+      if (safeData.sessions) {
+        result.sessions = {
+          maxActive: safeData.sessions.max_active || null,
+          idleTimeout: safeData.sessions.idle_timeout || null,
+        };
+      }
+
+      // === Cron ===
+      if (safeData.cron) {
+        result.cron = {
+          enabled: safeData.cron.enabled ?? null,
+          jobs: safeData.cron.jobs || [],
+        };
+      }
+
+      // === Toolsets ===
+      if (safeData.toolsets) {
+        result.toolsets = {
+          enabled: safeData.toolsets.enabled ?? null,
+          tools: safeData.toolsets.tools || [],
+        };
+      }
+
+      // === API Server ===
+      if (safeData.api_server) {
+        const api = safeData.api_server;
+        result.apiServer = {
+          enabled: api.enabled ?? null,
+          port: api.port || null,
+          host: api.host || null,
+        };
+        result.port = api.port || 8642;
+      }
+
+      // === Profiles ===
       result.profiles = this.discoverHermesProfiles();
     } catch (e) {
-      console.warn(`[ConfigReader] normalizeHermes 异常:`, e.message);
-    }
-
-    // 保底：至少有一个默认 agent
-    if (result.agents.length === 0) {
-      result.agents.push({ id: 'hermes-default', name: 'Hermes', description: 'Default Hermes Agent' });
+      console.warn('[ConfigReader] normalizeHermes 异常:', e.message);
     }
 
     return result;

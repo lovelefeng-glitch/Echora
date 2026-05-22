@@ -1,8 +1,8 @@
 # adapters — AI 适配器层
 
-> **文件**: `src/adapters/base-adapter.js`, `src/adapters/openclaw-adapter.js`, `src/adapters/hermes-adapter.js`, `src/adapters/cursor-adapter.js`  
+> **文件**: `src/adapters/base-adapter.js`, `src/adapters/openclaw-adapter.js`, `src/adapters/qclaw-adapter.js`, `src/adapters/hermes-adapter.js`, `src/adapters/cursor-adapter.js`  
 > **职责**: 为不同 AI 软件提供统一的对话接口  
-> **最后更新**: 2026-05-22 (v1.3)
+> **最后更新**: 2026-05-23 (v1.5)
 
 ---
 
@@ -78,9 +78,9 @@ adapter.sendMessageStream('main', '你好', {
 
 | aiType | 适配器类 | 网关协议 | 状态 |
 |--------|----------|----------|------|
-| `openclaw` | OpenClawAdapter | HTTP/SSE (OpenAI 兼容） | ✅ v1.0 |
-| `qclaw` | OpenClawAdapter | HTTP/SSE (OpenAI 兼容） | ✅ v1.0 |
-| `hermes` | HermesAdapter | HTTP/SSE (OpenAI 兼容） + X-Hermes-Session-Id + Echora Proxy | ✅ v3.4 |
+| `openclaw` | OpenClawAdapter | HTTP/SSE (OpenAI 兼容） | ✅ v1.2 |
+| `qclaw` | QClawAdapter | HTTP/SSE (OpenAI 兼容） | ✅ v1.0 |
+| `hermes` | HermesAdapter | HTTP/SSE (OpenAI 兼容） + 会话持久化 + Echora Proxy | ✅ v3.5 |
 | `cursor` | CursorAdapter | 本地检测 | ✅ v1.0 |
 | `windsurf` | 待实现 | ? | 📅计划 |
 
@@ -143,6 +143,26 @@ Hermes API Server: session_id = provided_session_id → 从 state.db 加载历�
 
 - Hermes 的 `X-Hermes-Session-Id` 需要 `API_SERVER_KEY` 已配置才能生效（否则返回 403）
 - 模型问题（如 `qwen/qwen3.5-122b-a10b` 返回空响应）需要在 Hermes 侧配置 fallback
+
+### 模型切换
+
+| 函数 | 触发方式 | 行为 |
+|------|----------|------|
+| `setModel(modelId)` | renderer 直接调 | 更新 `_currentModel` + 清空所有 session prompt state |
+| `switchModel(modelId)` | `agent:setModel` IPC（Hermes 专有路径）| 修改 config.yaml → 重启 Gateway → 双清缓存 |
+
+切换模型时清空两个缓存，确保 `getModelInfo` 返回 `contextUsed=0`，状态栏显示 `0/262K · 0%`。
+
+### Prompt Token 持久化 (v0.6)
+
+| 特性 | 说明 |
+|------|------|
+| 存储文件 | `echora_session_state.json`（hermesRoot 目录下）|
+| 存储格式 | `{"sessionId": lastPromptTokens}` Map 序列化 |
+| 加载时机 | constructor (`_loadPromptTokensState`) → 恢复 Map |
+| 保存时机 | 每次 `onDone` + `sendMessage` 非流式 → `_savePromptTokensState` |
+| 清除时机 | `switchModel` / `setModel` → `Map.clear()` + 立即持久化 |
+| 重启回退 | `getModelInfo` step 2.5: Map 为空返回 `0`，非空取最近值 |
 
 ---
 

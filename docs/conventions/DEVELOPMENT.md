@@ -36,6 +36,12 @@
 | `config:getAll` | ~~`getConfig`~~ ~~`readConfig`~~ |
 | `ai:rescan` | ~~`rescanAI`~~ ~~`rescanAi`~~ |
 | `startup:ai-detected` | ~~`startup:aiDetected`~~ ~~`aiDetected`~~ |
+| `draft:read` | ~~`draftRead`~~ ~~`draft/get`~~ |
+| `draft:write` | ~~`draftWrite`~~ ~~`draft/set`~~ |
+| `draft:save` | ~~`draftSave`~~ ~~`draft/persist`~~ |
+| `draft:reset` | ~~`draftReset`~~ ~~`draft/restore`~~ |
+| `draft:backups` | ~~`draftBackups`~~ ~~`draft/list`~~ |
+| `draft:paths` | ~~`draftPaths`~~ ~~`draft/info`~~ |
 
 ### 1.3 状态枚举值
 

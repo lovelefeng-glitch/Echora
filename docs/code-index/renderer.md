@@ -2,7 +2,7 @@
 
 > **文件**: `src/ui/renderer.js`  
 > **职责**: 所有界面逻辑（向导、侧边栏、聊天、设置）  
-> **最后更新**: 2026-05-22
+> **最后更新**: 2026-05-23
 
 ---
 
@@ -140,7 +140,7 @@ updateMessageContent(msgId, marked(content)) + 渲染 metrics + saveConversation
 
 | 函数 | 用途 |
 |------|------|
-| `loadModelInfo(agent?)` | 调 `agent.modelInfo()` → 更新输入区提示（模型名 + 上下文窗口 + 用量） |
+| `loadModelInfo(agent?)` | 调 `agent.modelInfo()` → 更新输入区提示：模型名 + 上下文占用 (52.3K/262K · 20.0%) |
 
 ### AI 管理
 

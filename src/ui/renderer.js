@@ -27,12 +27,33 @@ const STATE = {
   allAgents: [],
   conversations: {},
   envResult: {},
-  selectedModel: null,  // 用户当前选择的模型 ID
+  selectedModel: {},     // [P1-36] 按 AI 类型存储 { qclaw: "modelId", hermes: "modelId" }
+  activeStreams: new Map(), // [P1-39] msgId → { agentKey, convId } 追踪流式消息归属
 };
 
 const MAX_HISTORY = 200;
 const COLORS = ['#4A90D9','#E85D75','#7C5CBF','#F5A623','#50C878','#FF6B6B','#45B7D1','#FFD93D','#6C5B7B','#00B4D8'];
 const AI_ICONS = { qclaw:'🐉',openclaw:'🦞',cursor:'⚡',windsurf:'🌊',trae:'🚀',vscode:'💙' };
+
+// [P1-39] Agent 通知函数
+function _showAgentNotification(agentKey) {
+  const card = document.querySelector(`[data-agent-key="${agentKey}"]`);
+  if (card) card.classList.add('has-notification');
+}
+function _clearAgentNotification(agentKey) {
+  const card = document.querySelector(`[data-agent-key="${agentKey}"]`);
+  if (card) card.classList.remove('has-notification');
+}
+
+// [P1-39] 更新 conv 中流式消息内容
+function _updateStreamMessageInConv(msgId, content) {
+  const info = STATE.activeStreams.get(msgId);
+  if (!info) return;
+  const conv = STATE.conversations[info.agentKey]?.find(c => c.id === info.convId);
+  if (!conv) return;
+  const msg = conv.messages.find(m => m.id === msgId);
+  if (msg) msg.content = content;
+}
 
 // ========== 头像 ==========
 function getInitialChar(agent) {
@@ -483,8 +504,18 @@ function updateAgentStatusUI() {
 
 // ========== 选中 Agent + 会话管理 ==========
 async function selectAgent(agent) {
+  // [P1-36] 清除旧 Agent 的通知脉冲
+  _clearAgentNotification(agent.agentKey);
+
   STATE.currentAgentKey = agent.agentKey;
   STATE.currentConvId = null;
+
+  // [P1-36] 切换 Agent 时清空模型选择器
+  const modelSelector = document.getElementById('model-selector');
+  if (modelSelector) {
+    modelSelector.innerHTML = '';
+    modelSelector.style.display = 'none';
+  }
 
   const nameEl = document.getElementById('current-ai-name');
   nameEl.textContent = agent.agentName;
@@ -546,8 +577,15 @@ async function loadModelInfo(agent) {
       setHintText('');
       let txt = `✅ ${agentObj.aiName} · 端口 ${agentObj.aiType === 'hermes' ? 8085 : (agentObj.gatewayPort || '?')}`;
       if (info.model) txt += ` · ${info.model}`;
-      if (info.contextWindow) txt += ` · ${(info.contextWindow/1000).toFixed(0)}K`;
-      if (info.usagePct != null) txt += ` · 已用 ${info.usagePct}%`;
+      if (info.contextUsed != null && info.contextWindow) {
+        const usedK = info.contextUsed >= 1000
+          ? `${(info.contextUsed/1000).toFixed(1)}K`
+          : info.contextUsed;
+        txt += ` · ${usedK}/${(info.contextWindow/1000).toFixed(0)}K`;
+      } else if (info.contextWindow) {
+        txt += ` · ${(info.contextWindow/1000).toFixed(0)}K`;
+      }
+      if (info.usagePct != null) txt += ` · ${info.usagePct}%`;
       hint.appendChild(document.createTextNode(txt));
       if (selector) hint.appendChild(selector);
     }
@@ -562,10 +600,11 @@ async function loadModelInfo(agent) {
           const opt = document.createElement('option');
           opt.value = m.id;
           opt.textContent = m.name + (m.isDefault ? ' (默认)' : '');
-          if (!STATE.selectedModel && m.isDefault) opt.selected = true;
+          if (!STATE.selectedModel[agentObj.aiType] && m.isDefault) opt.selected = true;
           selector.appendChild(opt);
         }
-        if (STATE.selectedModel) selector.value = STATE.selectedModel;
+        // [P1-36] 从 per-aiType 恢复用户选择
+        if (STATE.selectedModel[agentObj.aiType]) selector.value = STATE.selectedModel[agentObj.aiType];
         selector.style.display = '';
       }
     }
@@ -616,9 +655,10 @@ function loadConvMessages(conv) {
       if (rightEl) {
         let metricsHtml = '';
         const m = msg.metrics;
-        if (m.usage && m.usage.completion_tokens > 0) {
-          const tok = m.usage.completion_tokens;
-          metricsHtml += `<span class="msg-metric" title="Prompt: ${m.usage.prompt_tokens} / Completion: ${tok}">${tok} tokens</span>`;
+        if (m.usage && m.usage.total_tokens > 0) {
+          const delta = m.usage.delta_prompt_tokens || m.usage.prompt_tokens;
+          const c = m.usage.completion_tokens;
+          metricsHtml += `<span class="msg-metric" title="prompt(本次增量): ${delta} / prompt(总): ${m.usage.prompt_tokens} / completion: ${c}">↑${(delta/1000).toFixed(1)}k ↓${(c/1000).toFixed(1)}k</span>`;
         }
         if (m.latency) {
           const sec = (m.latency / 1000).toFixed(1);
@@ -852,13 +892,24 @@ async function sendMessage() {
     }
     const rendered = typeof marked !== 'undefined' ? marked.parse(data.content) : data.content;
     updateMessageContent(msgId, rendered);
+    // [P1-39] 保存流式内容到 conv（用于跨 Agent 路由）
+    _updateStreamMessageInConv(msgId, data.content);
   });
 
-  // 工具调用事件
+  // 工具调用事件（按 toolCallId 去重：同一工具的 running→completed 算一次）
   let toolCallsReceived = [];
   const toolCleanup = window.echora.onStream.onToolCall((data) => {
     if (data.msgId !== msgId) return;
-    toolCallsReceived.push(data);
+    // 去重：相同 toolCallId 的事件（running→completed）更新而不是新增
+    const existingIdx = toolCallsReceived.findIndex(t => data.id && t.id === data.id);
+    if (existingIdx >= 0) {
+      // 更新已完成状态
+      if (data.status === 'completed' || data.status === 'error') {
+        toolCallsReceived[existingIdx] = { ...toolCallsReceived[existingIdx], ...data };
+      }
+    } else {
+      toolCallsReceived.push(data);
+    }
     const msgEl = document.getElementById(msgId);
     if (msgEl) {
       // 更新 footer 左侧的工具按钮
@@ -874,6 +925,7 @@ async function sendMessage() {
         toolBtn.textContent = `🔧 ${toolCallsReceived.length}`;
         toolBtn.dataset.tools = JSON.stringify(toolCallsReceived.map(t => ({
           name: t.name || t.tool || '',
+          emoji: t.emoji || '',
           label: t.label || '',
           status: t.status || 'running',
         })));
@@ -931,10 +983,11 @@ async function sendMessage() {
           let metricsHtml = '';
           if (data.metrics) {
             const m = data.metrics;
-            // 只显示 completion_tokens（本次消耗），prompt_tokens 是上下文已在 hint 栏显示
-            if (m.usage && m.usage.completion_tokens > 0) {
-              const tok = m.usage.completion_tokens;
-              metricsHtml += `<span class="msg-metric" title="Prompt: ${m.usage.prompt_tokens} / Completion: ${tok}">${tok} tokens</span>`;
+            // 显示增量 prompt + completion tokens（类似 OpenClaw ↑↓ 格式）
+            if (m.usage && m.usage.total_tokens > 0) {
+              const delta = m.usage.delta_prompt_tokens || m.usage.prompt_tokens;
+              const c = m.usage.completion_tokens;
+              metricsHtml += `<span class="msg-metric" title="prompt(本次增量): ${delta} / prompt(总): ${m.usage.prompt_tokens} / completion: ${c}">↑${(delta/1000).toFixed(1)}k ↓${(c/1000).toFixed(1)}k</span>`;
             }
             if (m.latency) {
               const sec = (m.latency / 1000).toFixed(1);
@@ -948,10 +1001,19 @@ async function sendMessage() {
           msgEl.dataset.tools = JSON.stringify(toolCallsReceived);
         }
       }
-      const conv = getOrCreateConv(STATE.currentAgentKey);
+      // [P1-39] 用 activeStreams 路由到正确的 conv（而非 STATE.currentAgentKey）
+      const streamInfo = STATE.activeStreams.get(msgId);
+      const targetAgentKey = streamInfo?.agentKey || STATE.currentAgentKey;
+      const conv = getOrCreateConv(targetAgentKey);
       conv.messages.push({ role: 'assistant', content: data.content, time: Date.now(), tools: toolCallsReceived.length > 0 ? toolCallsReceived : undefined, metrics: data.metrics || undefined });
       conv.updatedAt = Date.now();
       saveConversations();
+      // [P1-39] 清除活跃流追踪
+      STATE.activeStreams.delete(msgId);
+      // [P1-39] 如果消息属于其他 Agent，显示通知
+      if (streamInfo && streamInfo.agentKey !== STATE.currentAgentKey) {
+        _showAgentNotification(streamInfo.agentKey);
+      }
       // 刷新模型信息
       loadModelInfo();
     } else {
@@ -962,6 +1024,8 @@ async function sendMessage() {
 
   try {
     const conv = getOrCreateConv(STATE.currentAgentKey);
+    // [P1-39] 追踪流式消息归属
+    STATE.activeStreams.set(msgId, { agentKey: STATE.currentAgentKey, convId: conv.id });
     window.echora.message.sendStream(agent.aiType, agent.agentId, text, conv.userId, msgId);
   } catch (e) {
     clearTimeout(safetyTimer);
@@ -1183,16 +1247,9 @@ async function renderSettingsView() {
       perAIGroup.style.display = '';
       perAIList.innerHTML = aiTypes.map(aiType => {
         const val = s.timeoutPerAI?.[aiType] || '';
-        return `<div class="timeout-per-ai-item">
-          <span class="ai-label">${aiType}</span>
-          <input type="number" id="timeout-${aiType}" value="${val}" placeholder="${Math.round((s.timeout||120000)/1000)}" min="30" max="600" step="5" data-ai="${aiType}">
-          <span style="font-size:11px;color:var(--text-hint);">秒</span>
-          ${val ? `<button class="btn-sm" data-action="reset-timeout" data-ai="${aiType}" style="background:transparent;border:1px solid var(--border);color:var(--text-hint);border-radius:var(--radius-sm);cursor:pointer;">重置</button>` : ''}
-        </div>`;
+        return `<div class="timeout-per-ai-item"><span class="ai-label">${aiType}</span><input type="number" value="${val}" placeholder="${Math.round((s.timeout||120000)/1000)}" min="30" max="600" step="5" data-ai="${aiType}"><span style="font-size:11px;color:var(--text-hint);">秒</span></div>`;
       }).join('');
-    } else {
-      perAIGroup.style.display = 'none';
-    }
+    } else { perAIGroup.style.display = 'none'; }
   }
 
   // --- 轮询滑块 ---
@@ -1203,19 +1260,393 @@ async function renderSettingsView() {
     pollVal.textContent = Math.round((s.pollInterval || 10000) / 1000) + ' 秒';
   }
 
-  // --- AI 配置文件列表 ---
-  renderAIConfigList();
-
   // --- 滑块实时更新数值 ---
-  if (sliderTimeout && timeoutVal) {
-    sliderTimeout.oninput = () => { timeoutVal.textContent = sliderTimeout.value + ' 秒'; };
+  if (sliderTimeout && timeoutVal) sliderTimeout.oninput = () => { timeoutVal.textContent = sliderTimeout.value + ' 秒'; };
+  if (sliderPoll && pollVal) sliderPoll.oninput = () => { pollVal.textContent = sliderPoll.value + ' 秒'; };
+
+  // [P2-14] 渲染右侧 AI 图标栏 + 显示全局设置
+  renderSettingsSidebar();
+  _showSettingsPanel('global');
+}
+
+// [P2-14] 渲染设置页右侧 AI 图标栏
+const AI_ICONS_SETTINGS = { qclaw: '🐉', openclaw: '🦞', hermes: '🔮', cursor: '⚡', windsurf: '🌊', trae: '🚀' };
+
+function renderSettingsSidebar() {
+  const container = document.getElementById('settings-ai-icons');
+  if (!container) return;
+  const aiTypes = [...new Set(STATE.allAgents.map(a => a.aiType).filter(Boolean))];
+  container.innerHTML = aiTypes.map(aiType => {
+    const icon = AI_ICONS_SETTINGS[aiType] || '🤖';
+    const agent = STATE.allAgents.find(a => a.aiType === aiType);
+    const statusClass = agent?.status === 'running' ? 'running' : 'offline';
+    return `<button class="settings-icon-btn" data-settings-ai="${aiType}" title="${aiType}">` +
+      `<span class="settings-icon">${icon}</span>` +
+      `<span class="settings-icon-label">${aiType}</span>` +
+      `<span class="settings-icon-status ${statusClass}"></span></button>`;
+  }).join('');
+  // 绑定点击事件
+  container.querySelectorAll('.settings-icon-btn').forEach(btn => {
+    btn.addEventListener('click', () => _showSettingsPanel(btn.dataset.settingsAi));
+  });
+  // 全局按钮
+  const globalBtn = document.getElementById('btn-settings-global');
+  if (globalBtn) globalBtn.addEventListener('click', () => _showSettingsPanel('global'));
+}
+
+// [P2-14] 切换设置面板内容
+function _showSettingsPanel(target) {
+  const globalContent = document.getElementById('settings-global-content');
+  const aiContent = document.getElementById('settings-ai-content');
+  const title = document.getElementById('settings-panel-title');
+  const desc = document.getElementById('settings-panel-desc');
+  // 清除所有按钮的 active 状态
+  document.querySelectorAll('.settings-icon-btn').forEach(b => b.classList.remove('active'));
+  if (target === 'global') {
+    if (globalContent) globalContent.style.display = '';
+    if (aiContent) { aiContent.style.display = 'none'; aiContent.innerHTML = ''; }
+    if (title) title.textContent = '⚙️ 全局设置';
+    if (desc) desc.textContent = '选择右侧 AI 查看配置详情';
+    const btn = document.getElementById('btn-settings-global');
+    if (btn) btn.classList.add('active');
+  } else {
+    if (globalContent) globalContent.style.display = 'none';
+    if (aiContent) aiContent.style.display = '';
+    const icon = AI_ICONS_SETTINGS[target] || '🤖';
+    if (title) title.textContent = icon + ' ' + target + ' 配置';
+    if (desc) desc.textContent = '配置文件参数详情';
+    const btn = document.querySelector(`[data-settings-ai="${target}"]`);
+    if (btn) btn.classList.add('active');
+    _renderAISettingsPanel(target);
   }
-  if (sliderPoll && pollVal) {
-    sliderPoll.oninput = () => { pollVal.textContent = sliderPoll.value + ' 秒'; };
+}
+
+// [P2-14] 渲染 AI 配置面板
+async function _renderAISettingsPanel(aiType) {
+  const container = document.getElementById('settings-ai-content');
+  if (!container) return;
+  container.innerHTML = '<div style="padding:20px;color:var(--text-hint);">加载中...</div>';
+
+  // 优先从草稿文件读取（支持实时编辑预览）
+  let configData = null, configPath = '';
+  try {
+    const draftResult = await window.echora.draft.read(aiType);
+    if (draftResult?.success && draftResult.data) {
+      configData = draftResult.data;
+    }
+  } catch (e) {}
+
+  // 草稿不存在 → 降级读原配置
+  if (!configData) {
+    try {
+      const list = await window.echora.aiConfig.list();
+      const info = list[aiType] || {};
+      configPath = info.path || '';
+      configData = info.preview || info.data || null;
+    } catch (e) {}
   }
 
-  // --- Hermes 配置 ---
-  renderHermesSection();
+  // 获取原配置路径（展示用）
+  if (!configPath) {
+    try {
+      const paths = await window.echora.draft.paths();
+      configPath = paths?.[aiType]?.original || '';
+    } catch (e) {}
+  }
+
+  // 无配置 → 引导
+  if (!configData) {
+    container.innerHTML = `
+      <div style="padding:40px 20px;text-align:center;">
+        <div style="font-size:48px;margin-bottom:16px;">📂</div>
+        <p style="color:var(--text-secondary);margin-bottom:8px;">未找到 ${aiType} 的配置文件</p>
+        <p style="color:var(--text-hint);font-size:12px;margin-bottom:20px;">请选择配置文件路径，或让 Echora 自动搜索</p>
+        <div style="display:flex;gap:12px;justify-content:center;">
+          <button class="btn btn-primary" onclick="_browseConfigFile('${aiType}')">📂 手动选择</button>
+          <button class="btn btn-secondary" onclick="_autoSearchConfig('${aiType}')">🔍 自动搜索</button>
+        </div>
+      </div>`;
+    return;
+  }
+
+  let html = '';
+
+  // === 配置路径行 ===
+  html += `<div class="config-path-row" style="display:flex;align-items:center;gap:8px;">
+    <span style="font-size:12px;color:var(--text-hint);white-space:nowrap;">配置文件:</span>
+    <input type="text" class="config-path-input" id="config-path-${aiType}" value="${configPath}" readonly style="flex:1;">
+    <button class="btn btn-secondary btn-sm" onclick="_browseConfigFile('${aiType}')" style="white-space:nowrap;">📂 手动选择</button>
+    <button class="btn btn-secondary btn-sm" onclick="_autoSearchConfig('${aiType}')" style="white-space:nowrap;">🔍 自动搜索</button>
+  </div>`;
+
+  if (aiType === 'hermes') {
+    html += _renderHermesPanel(configData);
+  } else {
+    html += _renderQClawOpenClawPanel(configData);
+  }
+
+  // === 浮动保存/重置按钮 ===
+  html += `<div style="position:sticky;bottom:0;text-align:right;padding:16px 0;background:var(--bg-primary);display:flex;gap:8px;justify-content:flex-end;align-items:center;">
+    <button class="btn btn-secondary" onclick="_resetConfig('${aiType}')">🔄 重置</button>
+    <button class="btn btn-primary" id="btn-save-config-${aiType}" onclick="_saveConfig('${aiType}')" disabled>💾 保存配置</button>
+    <span id="config-save-status-${aiType}" style="font-size:12px;"></span>
+  </div>`;
+
+  container.innerHTML = html;
+
+  // 绑定折叠
+  container.querySelectorAll('.config-param-group-title').forEach(title => {
+    title.addEventListener('click', () => {
+      const group = title.closest('.config-param-group');
+      if (group) group.classList.toggle('collapsed');
+    });
+  });
+
+  // 绑定编辑检测（任何 input/textarea 变化 → 启用保存按钮）
+  container.querySelectorAll('input[data-field], textarea[data-field]').forEach(el => {
+    el.addEventListener('input', () => {
+      const btn = document.getElementById(`btn-save-config-${aiType}`);
+      if (btn) btn.disabled = false;
+    });
+  });
+}
+
+// === Hermes 面板 ===
+function _renderHermesPanel(d) {
+  let html = '';
+  if (d.model) html += _renderParamGroup('🧠 模型设置', [
+    { key: 'model.default', desc: '当前模型', value: d.model.default },
+    { key: 'model.main', desc: '主模型', value: d.model.main },
+    { key: 'model.max_tokens', desc: '最大输出token', value: d.model.maxTokens },
+    { key: 'model.temperature', desc: '温度', value: d.model.temperature },
+    { key: 'model.top_p', desc: 'Top P', value: d.model.topP },
+  ]);
+  if (d.agent) html += _renderParamGroup('🤖 Agent 设置', [
+    { key: 'agent.max_turns', desc: '最大轮次', value: d.agent.maxTurns },
+    { key: 'agent.gateway_timeout', desc: '网关超时(秒)', value: d.agent.gatewayTimeout },
+    { key: 'agent.reasoning_effort', desc: '推理强度', value: d.agent.reasoningEffort },
+  ]);
+  if (d.memory && Object.keys(d.memory).length > 0) html += _renderParamGroup('💾 记忆设置', [
+    { key: 'memory.enabled', desc: '启用记忆', value: d.memory.enabled },
+    { key: 'memory.backend', desc: '存储后端', value: d.memory.backend },
+    { key: 'memory.max_entries', desc: '最大条目', value: d.memory.maxEntries },
+  ]);
+  if (d.compression && Object.keys(d.compression).length > 0) html += _renderParamGroup('📦 压缩策略', [
+    { key: 'compression.enabled', desc: '启用压缩', value: d.compression.enabled },
+    { key: 'compression.window_size', desc: '窗口大小', value: d.compression.windowSize },
+    { key: 'compression.truncate_mode', desc: '截断模式', value: d.compression.truncateMode },
+  ]);
+  if (d.browser && Object.keys(d.browser).length > 0) html += _renderParamGroup('🌍 浏览器', [
+    { key: 'browser.engine', desc: '引擎', value: d.browser.engine },
+    { key: 'browser.path', desc: '路径', value: d.browser.path },
+  ]);
+  if (d.security && Object.keys(d.security).length > 0) html += _renderParamGroup('🔒 安全设置', [
+    { key: 'security.sandbox', desc: '沙盒模式', value: d.security.sandbox },
+    { key: 'security.approval_mode', desc: '审批模式', value: d.security.approvalMode },
+  ]);
+  if (d.display && Object.keys(d.display).length > 0) html += _renderParamGroup('🎨 显示设置', [
+    { key: 'display.language', desc: '语言', value: d.display.language },
+    { key: 'display.theme', desc: '主题', value: d.display.theme },
+  ]);
+  if (d.approvals && Object.keys(d.approvals).length > 0) html += _renderParamGroup('✋ 审批设置', [
+    { key: 'approvals.mode', desc: '审批模式', value: d.approvals.mode },
+    { key: 'approvals.auto_approve', desc: '自动审批', value: d.approvals.autoApprove },
+  ]);
+  if (d.sessions && Object.keys(d.sessions).length > 0) html += _renderParamGroup('💬 会话设置', [
+    { key: 'sessions.max_active', desc: '最大活跃', value: d.sessions.maxActive },
+    { key: 'sessions.idle_timeout', desc: '空闲超时', value: d.sessions.idleTimeout },
+  ]);
+  if (d.apiServer && Object.keys(d.apiServer).length > 0) html += _renderParamGroup('🌐 API Server', [
+    { key: 'api_server.enabled', desc: '启用API', value: d.apiServer.enabled },
+    { key: 'api_server.port', desc: '端口', value: d.apiServer.port },
+    { key: 'api_server.host', desc: '主机', value: d.apiServer.host },
+  ]);
+  if (d.profiles?.length) {
+    html += `<div class="config-param-group"><div class="config-param-group-title">👤 Profiles (${d.profiles.length}) <span class="pg-arrow">▼</span></div><div class="config-param-body">`;
+    d.profiles.forEach(p => {
+      html += `<div class="config-param-item"><span class="config-param-key">${p.name}</span><span class="config-param-value">${p.configPath ? '✅ 有配置' : '❌ 无配置'}</span></div>`;
+    });
+    html += '</div></div>';
+  }
+  return html;
+}
+
+// === QClaw / OpenClaw 面板 ===
+function _renderQClawOpenClawPanel(d) {
+  let html = '';
+
+  // Gateway
+  if (d.gateway) html += _renderParamGroup('🌐 Gateway 网关', [
+    { key: 'gateway.port', desc: '端口', value: d.gateway.port },
+    { key: 'gateway.mode', desc: '模式', value: d.gateway.mode },
+    { key: 'gateway.bind', desc: '绑定', value: d.gateway.bind },
+    { key: 'gateway.auth.mode', desc: '认证方式', value: d.gateway.authMode },
+    { key: 'gateway.http.chat', desc: 'HTTP聊天接口', value: d.gateway.httpEnabled },
+    { key: 'gateway.controlUi', desc: '控制台免认证', value: d.gateway.controlUiAllowInsecure },
+    { key: 'gateway.tailscale', desc: 'Tailscale', value: d.gateway.tailscaleMode },
+  ]);
+
+  // Agent 列表（大卡片，包含子卡片）
+  if (d.agents?.length) {
+    html += `<div class="config-param-group"><div class="config-param-group-title">🤖 Agent 列表 (${d.agents.length}) <span class="pg-arrow">▼</span></div><div class="config-param-body" style="padding:8px;">`;
+    d.agents.forEach(a => {
+      html += `<div class="config-sub-card" style="border:1px solid var(--border);border-radius:8px;padding:12px;margin:8px 0;background:var(--bg-secondary);">`;
+      html += `<div style="font-weight:600;font-size:13px;margin-bottom:8px;color:var(--text-primary);">${a.emoji||'🤖'} ${a.name} <span style="color:var(--text-hint);font-size:11px;">(${a.id})</span></div>`;
+      html += _renderEditableField('agents', a.id, 'id', 'Agent ID', a.id, false);
+      html += _renderEditableField('agents', a.id, 'name', '名称', a.name, true);
+      html += _renderEditableField('agents', a.id, 'workspace', '工作空间', a.workspace, true);
+      html += _renderEditableField('agents', a.id, 'modelPrimary', '主模型', a.modelPrimary, true);
+      html += _renderEditableField('agents', a.id, 'modelFallbacks', '备用模型', a.modelFallbacks?.join(' → ') || '', true);
+      html += _renderEditableField('agents', a.id, 'reasoningDefault', '推理模式', a.reasoningDefault, true);
+      html += `<div class="config-param-item"><span class="config-param-key">skills</span><span class="config-param-desc">Skills数量</span><span class="config-param-value number">${a.skills?.length || 0}</span></div>`;
+      html += '</div>';
+    });
+    html += '</div></div>';
+  }
+
+  // 模型提供商（大卡片，包含子卡片）
+  if (d.models?.length) {
+    html += `<div class="config-param-group"><div class="config-param-group-title">🧠 模型提供商 (${d.models.length}) <span class="pg-arrow">▼</span></div><div class="config-param-body" style="padding:8px;">`;
+    d.models.forEach(p => {
+      html += `<div class="config-sub-card" style="border:1px solid var(--border);border-radius:8px;padding:12px;margin:8px 0;background:var(--bg-secondary);">`;
+      html += `<div style="font-weight:600;font-size:13px;margin-bottom:8px;color:var(--text-primary);">📦 ${p.provider}</div>`;
+      html += _renderEditableField('models', p.provider, 'baseUrl', 'API地址', p.baseUrl, true);
+      html += _renderEditableField('models', p.provider, 'api', 'API协议', p.api, true);
+      if (p.models?.length) {
+        html += '<div style="font-size:11px;color:var(--text-hint);margin:8px 0 4px;border-top:1px solid var(--border-light);padding-top:8px;">模型列表:</div>';
+        p.models.forEach(m => {
+          html += `<div class="config-sub-card" style="border:1px solid var(--border-light);border-radius:6px;padding:8px;margin:6px 0;background:var(--bg-primary);">`;
+          html += `<div class="config-param-item" style="padding:0 0 4px;"><span class="config-param-key">模型ID</span><span class="config-param-desc">模型标识</span><span class="config-param-value" style="font-family:monospace;">${m.id}</span></div>`;
+          html += `<div class="config-param-item" style="padding:2px 0;"><span class="config-param-key">名称</span><span class="config-param-desc">显示名</span><span class="config-param-value">${m.name || m.id}</span></div>`;
+          html += _renderEditableField('models', p.provider, `ctx_${m.id}`, '上下文长度', m.contextWindow ? `${m.contextWindow}` : '', true);
+          html += _renderEditableField('models', p.provider, `max_${m.id}`, '最大输出token', m.maxTokens ? `${m.maxTokens}` : '', true);
+          html += `<div class="config-param-item" style="padding:2px 0;align-items:center;"><span class="config-param-key">reasoning</span><span class="config-param-desc">思考能力</span><span class="config-param-value">${m.reasoning ? '<span style="color:var(--success);">支持思考</span>' : '<span style="color:var(--text-hint);">不支持</span>'}</span></div>`;
+          if (m.input?.length) html += `<div class="config-param-item" style="padding:2px 0;"><span class="config-param-key">input</span><span class="config-param-desc">输入类型</span><span class="config-param-value">${m.input.join('、')}</span></div>`;
+          html += `<div class="config-param-item" style="padding:2px 0;"><span class="config-param-key" style="color:var(--text-hint);">完整路径</span><span class="config-param-desc">调用标识</span><span class="config-param-value" style="font-family:monospace;font-size:11px;color:var(--text-secondary);">${m.fullPath}</span></div>`;
+          html += '</div>';
+        });
+      }
+      html += '</div>';
+    });
+    html += '</div></div>';
+  }
+
+  // Session
+  if (d.session && Object.keys(d.session).length > 0) html += _renderParamGroup('💬 会话设置', [
+    { key: 'session.resetMode', desc: '重置模式', value: d.session.resetMode },
+    { key: 'session.dmScope', desc: '作用域', value: d.session.dmScope },
+    { key: 'session.maxHistory', desc: '最大历史', value: d.session.maxHistory },
+  ]);
+
+  // Tools
+  if (d.tools && Object.keys(d.tools).length > 0) html += _renderParamGroup('🔧 工具设置', [
+    { key: 'tools.allowBash', desc: '允许Bash', value: d.tools.allowBash },
+    { key: 'tools.allowNetwork', desc: '允许网络', value: d.tools.allowNetwork },
+    { key: 'tools.timeout', desc: '工具超时', value: d.tools.toolTimeout },
+  ]);
+
+  // Browser
+  if (d.browser && Object.keys(d.browser).length > 0) html += _renderParamGroup('🌍 浏览器', [
+    { key: 'browser.enabled', desc: '启用浏览器', value: d.browser.enabled },
+    { key: 'browser.engine', desc: '引擎', value: d.browser.engine },
+  ]);
+
+  return html;
+}
+
+// === 可编辑字段渲染 ===
+function _renderEditableField(section, sectionId, field, desc, value, editable) {
+  const fieldId = `field-${section}-${sectionId}-${field}`;
+  if (!editable) {
+    return `<div class="config-param-item"><span class="config-param-key">${field}</span><span class="config-param-desc">${desc}</span><span class="config-param-value">${value || ''}</span></div>`;
+  }
+  return `<div class="config-param-item" style="align-items:center;">
+    <span class="config-param-key">${field}</span>
+    <span class="config-param-desc">${desc}</span>
+    <input type="text" class="config-param-input" id="${fieldId}" data-section="${section}" data-section-id="${sectionId}" data-field="${field}" value="${value || ''}" style="flex:1;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--bg-primary);color:var(--text-primary);">
+  </div>`;
+}
+
+// === 配置文件操作 ===
+function _browseConfigFile(aiType) {
+  const statusEl = document.getElementById(`config-save-status-${aiType}`);
+  if (statusEl) statusEl.innerHTML = '<span style="color:var(--accent);">📂 文件选择对话框（待实装）</span>';
+}
+
+function _autoSearchConfig(aiType) {
+  const statusEl = document.getElementById(`config-save-status-${aiType}`);
+  if (statusEl) statusEl.innerHTML = '<span style="color:var(--accent);">🔍 搜索中...</span>';
+  setTimeout(() => {
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--accent);">🔍 自动搜索（待实装）</span>';
+  }, 1000);
+}
+
+// 保存：草稿 → 原配置
+async function _saveConfig(aiType) {
+  const btn = document.getElementById(`btn-save-config-${aiType}`);
+  const statusEl = document.getElementById(`config-save-status-${aiType}`);
+  if (btn) btn.disabled = true;
+  if (statusEl) statusEl.innerHTML = '<span style="color:var(--accent);">💾 保存中...</span>';
+
+  try {
+    // 先收集所有编辑字段的值，写入草稿
+    const draftResult = await window.echora.draft.read(aiType);
+    if (draftResult?.success && draftResult.data) {
+      const data = draftResult.data;
+      // 收集编辑后的值（这里需要根据 UI 结构提取）
+      // 暂时直接保存当前草稿
+      await window.echora.draft.write(aiType, data);
+    }
+    // 草稿 → 原配置
+    const saveResult = await window.echora.draft.save(aiType);
+    if (saveResult?.success) {
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--success);">✅ 保存成功</span>';
+    } else {
+      if (statusEl) statusEl.innerHTML = `<span style="color:var(--error);">❌ 保存失败: ${saveResult?.error || '未知错误'}</span>`;
+    }
+  } catch (e) {
+    if (statusEl) statusEl.innerHTML = `<span style="color:var(--error);">❌ ${e.message}</span>`;
+  }
+}
+
+// 重置：原配置 → 草稿
+async function _resetConfig(aiType) {
+  const statusEl = document.getElementById(`config-save-status-${aiType}`);
+  if (statusEl) statusEl.innerHTML = '<span style="color:var(--accent);">🔄 重置中...</span>';
+
+  try {
+    const result = await window.echora.draft.reset(aiType);
+    if (result?.success) {
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--success);">✅ 已重置</span>';
+      // 刷新面板
+      _renderAISettingsPanel(aiType);
+    } else {
+      if (statusEl) statusEl.innerHTML = `<span style="color:var(--error);">❌ 重置失败: ${result?.error}</span>`;
+    }
+  } catch (e) {
+    if (statusEl) statusEl.innerHTML = `<span style="color:var(--error);">❌ ${e.message}</span>`;
+  }
+}
+
+// [P2-14] 通用参数组渲染
+function _renderParamGroup(title, params) {
+  let html = `<div class="config-param-group"><div class="config-param-group-title">${title} <span class="pg-arrow" style="font-size:10px;">▼</span></div><div class="config-param-body">`;
+  html += _renderParamItems(params);
+  html += '</div></div>';
+  return html;
+}
+
+function _renderParamItems(params) {
+  let html = '';
+  params.forEach(p => {
+    if (p.value === null || p.value === undefined || p.value === '') return;
+    let valClass = 'config-param-value';
+    let display = String(p.value);
+    if (typeof p.value === 'boolean') { display = p.value ? '✅' : '❌'; valClass += ' boolean'; }
+    else if (typeof p.value === 'number') { display = p.value.toLocaleString(); valClass += ' number'; }
+    html += `<div class="config-param-item"><span class="config-param-key">${p.key}</span><span class="config-param-desc">${p.desc}</span><span class="${valClass}">${display}</span></div>`;
+  });
+  return html;
 }
 
 async function renderAIConfigList() {
@@ -1437,17 +1868,24 @@ function bindEvents() {
       overlay.querySelector('#close-tool-calls').addEventListener('click', () => overlay.remove());
     }
     const list = overlay.querySelector('#tool-calls-list');
-    const toolNameMap = { terminal: '终端命令', web_search: '网络搜索', read_file: '读取文件', write_file: '写入文件' };
+    const toolNameMap = { terminal: '终端命令', web_search: '网络搜索', read_file: '读取文件', write_file: '写入文件', search_file: '搜索文件', list_files: '列出文件', session_search: '会话搜索', shell_exec: 'Shell命令' };
     list.innerHTML = tools.map(t => {
-      const icon = t.status === 'completed' ? '✅' : t.status === 'error' ? '❌' : '⏳';
+      const statusIcon = t.status === 'completed' ? '✅' : t.status === 'error' ? '❌' : '⏳';
+      const toolIcon = t.emoji || '🔧';
       const friendlyName = toolNameMap[t.name] || t.name;
-      // 解析 label：如果是命令，截断并格式化
+      // 行为过程描述
       let labelHtml = '';
       if (t.label) {
-        const short = t.label.length > 120 ? t.label.substring(0, 120) + '...' : t.label;
-        labelHtml = `<div style="color:var(--text-secondary);font-size:11px;margin-top:4px;background:var(--bg-secondary);padding:6px;border-radius:4px;word-break:break-all;max-height:100px;overflow-y:auto;"><code>${escapeHtml(short)}</code></div>`;
+        const short = t.label.length > 200 ? t.label.substring(0, 200) + '...' : t.label;
+        labelHtml = `<div style="color:var(--text-secondary);font-size:11px;margin-top:4px;background:var(--bg-secondary);padding:6px;border-radius:4px;word-break:break-all;max-height:120px;overflow-y:auto;"><code>${escapeHtml(short)}</code></div>`;
       }
-      return `<div style="padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;">${icon} <strong>${escapeHtml(friendlyName)}</strong>${labelHtml}</div>`;
+      return `<div style="padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;display:flex;align-items:flex-start;gap:8px;">
+        <span style="font-size:16px;flex-shrink:0;">${toolIcon}</span>
+        <div style="flex:1;min-width:0;">
+          <div>${statusIcon} <strong>${escapeHtml(friendlyName)}</strong></div>
+          ${labelHtml}
+        </div>
+      </div>`;
     }).join('');
   });
 
@@ -1607,7 +2045,8 @@ function bindEvents() {
 
       try {
         const result = await window.echora.agent.setModel(agent.aiType, modelId);
-        STATE.selectedModel = modelId;
+        // [P1-36] 按 aiType 存储用户选择
+        STATE.selectedModel[agent.aiType] = modelId;
 
         if (result && result.needsRestart) {
           // Hermes 等需要重启的适配器：显示加载动画，等待 Gateway 恢复

@@ -43,6 +43,9 @@ class HermesAdapter extends BaseAdapter {
     this._configParams = null;
     this._lastModelInfo = null;
     this._currentModel = null;  // null = use config default
+    // 按 session 持久化 prompt token 基准（重启后恢复）
+    this._promptTokensStateFile = null;
+    this._lastPromptTokensBySession = this._loadPromptTokensState();
   }
 
   _loadHermesConfig() {
@@ -60,6 +63,37 @@ class HermesAdapter extends BaseAdapter {
     } catch (e) {
       console.warn('[HermesAdapter] config.yaml 读取失败:', e.message);
       return false;
+    }
+  }
+
+  _getStateFilePath() {
+    if (this._promptTokensStateFile) return this._promptTokensStateFile;
+    this._loadHermesConfig();
+    const hermesRoot = this.config.hermesRoot || path.join(os.homedir(), 'AppData', 'Local', 'hermes');
+    this._promptTokensStateFile = path.join(hermesRoot, 'echora_session_state.json');
+    return this._promptTokensStateFile;
+  }
+
+  _loadPromptTokensState() {
+    try {
+      const p = this._getStateFilePath();
+      if (fs.existsSync(p)) {
+        const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+        return new Map(Object.entries(data));
+      }
+    } catch (e) {
+      console.warn('[HermesAdapter] 无法读取 session state:', e.message);
+    }
+    return new Map();
+  }
+
+  _savePromptTokensState() {
+    try {
+      const p = this._getStateFilePath();
+      const obj = Object.fromEntries(this._lastPromptTokensBySession);
+      fs.writeFileSync(p, JSON.stringify(obj, null, 2), 'utf8');
+    } catch (e) {
+      console.warn('[HermesAdapter] 无法保存 session state:', e.message);
     }
   }
 
@@ -268,6 +302,10 @@ class HermesAdapter extends BaseAdapter {
           completionTokens: data.usage.completion_tokens || 0,
           totalTokens: data.usage.total_tokens || 0,
         };
+        // 同步更新持久化 session state（与流式路径保持一致）
+        const sessionKey = userId || '_default';
+        this._lastPromptTokensBySession.set(sessionKey, data.usage.prompt_tokens || 0);
+        this._savePromptTokensState();
       } else if (data.model) {
         this._lastModelInfo = { model: data.model, promptTokens: null, completionTokens: null, totalTokens: null };
       }
@@ -362,6 +400,7 @@ class HermesAdapter extends BaseAdapter {
     this._streamStartTime = Date.now();
     this._lastLatency = null;
     this._lastToolCalls = [];
+    this._tokensCaptured = false;  // 防止 hermes.token_usage 覆盖标准 usage
     this._lastFirstChunkTime = null;
 
     let latestMessage;
@@ -470,12 +509,28 @@ class HermesAdapter extends BaseAdapter {
               logAdapter('DEBUG', 'Hermes tool.progress', { tool: parsed.tool, label: parsed.label, status: parsed.status });
               const toolInfo = {
                 name: parsed.tool || parsed.name || 'unknown',
+                emoji: parsed.emoji || '',
                 label: parsed.label || '',
                 status: parsed.status || 'running',
                 id: parsed.toolCallId || '',
               };
-              this._lastToolCalls.push(toolInfo);
-              onToolCall(toolInfo);
+              // 按 toolCallId 去重合并（保留 running 事件的 emoji/label，只更新 status）
+              const existingIdx = this._lastToolCalls.findIndex(t => toolInfo.id && t.id === toolInfo.id);
+              let mergedInfo = toolInfo;
+              if (existingIdx >= 0) {
+                const prev = this._lastToolCalls[existingIdx];
+                mergedInfo = {
+                  name: toolInfo.name !== 'unknown' ? toolInfo.name : prev.name,
+                  emoji: toolInfo.emoji || prev.emoji,
+                  label: toolInfo.label || prev.label,
+                  status: toolInfo.status !== 'running' ? toolInfo.status : prev.status,
+                  id: toolInfo.id || prev.id,
+                };
+                this._lastToolCalls[existingIdx] = mergedInfo;
+              } else {
+                this._lastToolCalls.push(toolInfo);
+              }
+              onToolCall(mergedInfo);
               currentEvent = '';
               continue;
             }
@@ -489,14 +544,15 @@ class HermesAdapter extends BaseAdapter {
                   completionTokens: parsed.usage.completion_tokens || 0,
                   totalTokens: parsed.usage.total_tokens || 0,
                 };
+                this._tokensCaptured = true;
               }
               currentEvent = '';
               continue;
             }
-            // Hermes token 用量事件
+            // Hermes token 用量事件（仅作兜底，不覆盖已捕获的标准 usage）
             if (currentEvent === 'hermes.token_usage') {
               logAdapter('DEBUG', 'Hermes token_usage', parsed);
-              if (parsed.prompt || parsed.prompt_tokens) {
+              if (!this._tokensCaptured && (parsed.prompt || parsed.prompt_tokens)) {
                 this._lastModelInfo = {
                   model: this._lastModelInfo?.model || null,
                   promptTokens: parsed.prompt || parsed.prompt_tokens || 0,
@@ -529,6 +585,7 @@ class HermesAdapter extends BaseAdapter {
                 completionTokens: parsed.usage.completion_tokens || 0,
                 totalTokens: parsed.usage.total_tokens || 0,
               };
+              this._tokensCaptured = true;
             }
             // 标准 tool_calls（非 Hermes 适配器可能用这个）
             const toolCalls = parsed.choices?.[0]?.delta?.tool_calls;
@@ -546,11 +603,21 @@ class HermesAdapter extends BaseAdapter {
         const finalContent = fullContent || lastMessage || '';
         this._lastLatency = Date.now() - (this._streamStartTime || Date.now());
         const firstChunkLatency = this._lastFirstChunkTime ? this._lastFirstChunkTime - (this._streamStartTime || Date.now()) : null;
+        // 按 session 计算增量 prompt tokens（本次 - 上次，重启后从磁盘恢复）
+        const curPrompt = this._lastModelInfo?.promptTokens || 0;
+        const sessionKey = userId || '_default';
+        const lastPrompt = this._lastPromptTokensBySession.get(sessionKey) || 0;
+        const deltaPrompt = lastPrompt > 0 && curPrompt > lastPrompt
+          ? curPrompt - lastPrompt
+          : curPrompt;  // 新会话或上次未记录：全部算增量
+        this._lastPromptTokensBySession.set(sessionKey, curPrompt);
+        this._savePromptTokensState();
         const metrics = {
           usage: this._lastModelInfo ? {
-            prompt_tokens: this._lastModelInfo.promptTokens || 0,
+            prompt_tokens: curPrompt,
             completion_tokens: this._lastModelInfo.completionTokens || 0,
             total_tokens: this._lastModelInfo.totalTokens || 0,
+            delta_prompt_tokens: deltaPrompt,
           } : null,
           latency: this._lastLatency,
           firstChunkLatency,
@@ -609,9 +676,9 @@ class HermesAdapter extends BaseAdapter {
       // 上下文窗口：从 custom_providers 匹配当前模型
       if (!contextWindow) {
         const targetModel = modelName || this._hermesConfig.model?.default || this._hermesConfig.model?.main;
+        // max_tokens 是最大输出token数，不是上下文窗口，不能用作回退值
         contextWindow = this._findContextLength(targetModel)
-          || this._hermesConfig.model?.context_window
-          || this._hermesConfig.model?.max_tokens;
+          || this._hermesConfig.model?.context_window;
       }
     }
 
@@ -619,6 +686,17 @@ class HermesAdapter extends BaseAdapter {
     if (this._lastModelInfo) {
       contextUsed = this._lastModelInfo.promptTokens > 0 ? this._lastModelInfo.promptTokens : null;
       if (!modelName && this._lastModelInfo.model) modelName = this._lastModelInfo.model;
+    }
+
+    // 2.5) 重启后无 _lastModelInfo 时，从持久化 session state 恢复（就近取一个 session 的值）
+    if (!contextUsed) {
+      if (this._lastPromptTokensBySession.size > 0) {
+        const vals = [...this._lastPromptTokensBySession.values()];
+        contextUsed = vals.find(v => v > 0) || null;
+      } else {
+        // Map 为空（新启动或刚切换模型）：显式返回 0，状态栏显示 0/262K
+        contextUsed = 0;
+      }
     }
 
     // 3) 尝试实时查询 /v1/models
@@ -632,7 +710,7 @@ class HermesAdapter extends BaseAdapter {
     }
 
     // 4) 计算占用比例
-    if (contextUsed > 0 && contextWindow > 0) {
+    if (contextUsed != null && contextUsed >= 0 && contextWindow > 0) {
       usagePct = Math.round((contextUsed / contextWindow) * 100 * 10) / 10;
     }
 
@@ -766,8 +844,15 @@ class HermesAdapter extends BaseAdapter {
    * @param {string|null} modelId 模型 ID，null 恢复默认
    */
   setModel(modelId) {
+    const prev = this._currentModel;
     this._currentModel = modelId || null;
-    logAdapter('INFO', 'setModel', { model: this._currentModel || '(default)' });
+    logAdapter('INFO', 'setModel', { from: prev || '(default)', to: this._currentModel || '(default)' });
+    // 切换模型时清空增量基准（新模型会把完整上下文重新送进去）
+    if (modelId && modelId !== prev) {
+      this._lastPromptTokensBySession.clear();
+      this._savePromptTokensState();
+      logAdapter('INFO', 'setModel: cleared prompt token state for all sessions');
+    }
     return { success: true, model: this._currentModel };
   }
 
@@ -827,6 +912,12 @@ class HermesAdapter extends BaseAdapter {
     if (newBaseUrl) config.model.base_url = newBaseUrl;
     if (newApiKey) config.model.api_key = newApiKey;
     this._currentModel = modelId || null;
+
+    // 切换模型时清空增量基准和缓存（新模型会把完整上下文重新送进去）
+    this._lastModelInfo = null;
+    this._lastPromptTokensBySession.clear();
+    this._savePromptTokensState();
+    logAdapter('INFO', 'switchModel: cleared prompt token state for all sessions');
 
     logAdapter('INFO', 'switchModel: updating config.yaml', {
       oldModel, newModel,

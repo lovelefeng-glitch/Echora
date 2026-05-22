@@ -1,8 +1,8 @@
-// OpenClaw 专属适配器 v1.2
-// 从 QClaw/OpenClaw 共用版本拆分
-// - 读 ~/.openclaw/openclaw.json（token + 端口）
-// - sendMessageStream: 解析 tool_calls + usage
-// - listModels: 从 models.providers 提取
+// QClaw 专属适配器 v1.0
+// 从 openclaw-adapter.js 拆分，QClaw 专属逻辑
+// - 读 ~/.qclaw/openclaw.json（token + 端口）
+// - switchModel: 修改配置文件 + 重启 gateway
+// - listModels: 从 providers 提取模型列表
 
 const BaseAdapter = require('./base-adapter');
 const { spawn } = require('child_process');
@@ -11,53 +11,60 @@ const fs = require('fs');
 const http = require('http');
 const os = require('os');
 
-class OpenClawAdapter extends BaseAdapter {
+class QClawAdapter extends BaseAdapter {
   constructor(config = {}) {
     super(config);
-    this.aiType = 'openclaw';
-    this.name = 'openclaw';
+    this.aiType = 'qclaw';
+    this.name = 'qclaw';
     this.token = config.token || '';
-    this.baseUrl = config.baseUrl || `http://127.0.0.1:${config.port || 18789}`;
+    this.baseUrl = config.baseUrl || `http://127.0.0.1:${config.port || 28789}`;
     this._proc = null;
     this._chatEndpoint = null;
-    this._requestTimeout = 300000;  // 5分钟，从配置读取
+    this._requestTimeout = 300000;  // 5分钟，与 OpenClaw 对齐
     this._currentModel = null;
     this._defaultModel = null;
+    this._lastModelInfo = null;
+    this._modelInfoCache = new Map();
     this._loadConfig();
   }
 
   /**
-   * 从 ~/.openclaw/openclaw.json 读取配置
+   * 从 ~/.qclaw/openclaw.json 读取配置
    */
   _loadConfig() {
     try {
       const configPath = this.config.configPath
-        || path.join(os.homedir(), '.openclaw', 'openclaw.json');
+        || path.join(os.homedir(), '.qclaw', 'openclaw.json');
       if (fs.existsSync(configPath)) {
         const raw = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         this.token = raw.gateway?.auth?.token || this.token;
-        this.baseUrl = `http://127.0.0.1:${raw.gateway?.port || 18789}`;
+        this.baseUrl = `http://127.0.0.1:${raw.gateway?.port || 28789}`;
+        // 读默认模型
         const agents = raw.agents?.list || [];
-        if (agents[0]?.model?.primary) this._defaultModel = agents[0].model.primary;
-        console.log('[OpenClawAdapter] Config loaded: token=%s... baseUrl=%s', this.token?.substring(0,8), this.baseUrl);
-      } else {
-        console.warn('[OpenClawAdapter] Config not found:', configPath);
+        if (agents[0]?.model?.primary) {
+          this._defaultModel = agents[0].model.primary;
+        }
       }
-    } catch (e) {
-      console.error('[OpenClawAdapter] Config load error:', e.message);
-    }
+    } catch (e) {}
   }
 
   async start() {
     const alive = await this.getStatus();
     if (alive.status === 'running') return { success: true, message: '网关已在运行' };
     const exePath = this.config.exePath || '';
-    if (!exePath || !fs.existsSync(exePath)) return { success: false, message: '可执行文件路径未配置或不存在' };
-    this._proc = spawn(exePath, ['gateway', 'start', '--port', String(this.config.port || 18789)],
+    if (!exePath || !fs.existsSync(exePath)) {
+      return { success: false, message: '可执行文件路径未配置或不存在' };
+    }
+    this._proc = spawn(exePath, ['gateway', 'start', '--port', String(this.config.port || 28789)],
       { cwd: path.dirname(exePath), detached: true, stdio: ['ignore'] });
     this.status = 'starting';
-    try { await this._waitForReady(20000); return { success: true, message: '网关启动成功' }; }
-    catch (e) { this.status = 'error'; return { success: false, message: e.message }; }
+    try {
+      await this._waitForReady(20000);
+      return { success: true, message: '网关启动成功' };
+    } catch (e) {
+      this.status = 'error';
+      return { success: false, message: e.message };
+    }
   }
 
   async stop() {
@@ -82,7 +89,7 @@ class OpenClawAdapter extends BaseAdapter {
   async listAgents() {
     const agents = [];
     try {
-      const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
+      const configPath = path.join(os.homedir(), '.qclaw', 'openclaw.json');
       if (fs.existsSync(configPath)) {
         const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         const list = cfg.agents?.list || [];
@@ -97,39 +104,13 @@ class OpenClawAdapter extends BaseAdapter {
         }
       }
     } catch (e) {}
-    // 扫描 agents 目录
-    try {
-      const agentsDir = path.join(os.homedir(), '.openclaw', 'agents');
-      if (fs.existsSync(agentsDir)) {
-        const dirs = fs.readdirSync(agentsDir, { withFileTypes: true });
-        for (const entry of dirs) {
-          if (!entry.isDirectory() || agents.some(a => a.id === entry.name)) continue;
-          let agentName = entry.name;
-          let emoji = null;
-          try {
-            for (const fname of ['agent/IDENTITY.md', 'IDENTITY.md']) {
-              const p = path.join(agentsDir, entry.name, fname);
-              if (fs.existsSync(p)) {
-                const content = fs.readFileSync(p, 'utf8');
-                const nameMatch = content.match(/Name:\s*(.+)/i);
-                const emojiMatch = content.match(/Emoji:\s*(.+)/i);
-                if (nameMatch) agentName = nameMatch[1].trim();
-                if (emojiMatch) emoji = emojiMatch[1].trim();
-                break;
-              }
-            }
-          } catch (e) {}
-          agents.push({ id: entry.name, name: agentName, emoji, description: '' });
-        }
-      }
-    } catch (e) {}
-    if (agents.length === 0) agents.push({ id: 'main', name: 'OpenClaw', description: '默认 Agent' });
+    if (agents.length === 0) agents.push({ id: 'main', name: 'QClaw', description: '默认 Agent' });
     return agents;
   }
 
   async sendMessage(agentId, message, userId) {
     if (this._chatEndpoint === null) this._chatEndpoint = await this._discoverChatEndpoint();
-    if (!this._chatEndpoint) return { success: false, message: 'OpenClaw 网关不支持 REST 聊天 API' };
+    if (!this._chatEndpoint) return { success: false, message: 'QClaw 网关不支持 REST 聊天 API' };
     const model = agentId && agentId !== 'main' ? `openclaw/${agentId}` : 'openclaw';
     const body = JSON.stringify({
       model, messages: [{ role: 'user', content: message }],
@@ -151,7 +132,6 @@ class OpenClawAdapter extends BaseAdapter {
       model, messages: [{ role: 'user', content: message }],
       user: userId || undefined, stream: true, max_tokens: 4096,
     });
-    console.log('[OpenClawAdapter] sendMessageStream: model=%s, endpoint=%s, token=%s...', model, this._chatEndpoint || '/v1/chat/completions', this.token?.substring(0,8));
     const url = new URL(this.baseUrl);
     const endpoint = this._chatEndpoint || '/v1/chat/completions';
     const options = {
@@ -202,11 +182,14 @@ class OpenClawAdapter extends BaseAdapter {
                 });
               }
             }
+            // 捕获 usage
             if (parsed.usage) usage = parsed.usage;
           } catch (e) {}
         }
       });
-      res.on('end', () => { if (onDone) onDone(fullContent, null, usage); });
+      res.on('end', () => {
+        if (onDone) onDone(fullContent, null, usage);
+      });
     });
     req.setTimeout(this._requestTimeout, () => { req.destroy(); if (onError) onError(new Error('请求超时')); });
     req.on('error', (err) => { if (onError) onError(err); });
@@ -217,7 +200,15 @@ class OpenClawAdapter extends BaseAdapter {
   // ========== 模型信息 ==========
 
   async getModelInfo() {
-    const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
+    const cacheKey = this._currentModel || 'default';
+    if (this._modelInfoCache.has(cacheKey)) return this._modelInfoCache.get(cacheKey);
+    const info = await this._fetchModelInfo();
+    this._modelInfoCache.set(cacheKey, info);
+    return info;
+  }
+
+  async _fetchModelInfo() {
+    const configPath = path.join(os.homedir(), '.qclaw', 'openclaw.json');
     let modelName = this._currentModel || this._defaultModel || null;
     let contextWindow = null;
     try {
@@ -225,6 +216,7 @@ class OpenClawAdapter extends BaseAdapter {
         const raw = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         const agents = raw.agents?.list || [];
         if (agents[0]?.model?.primary) modelName = agents[0].model.primary;
+        // 尝试从 models.providers 读 contextWindow
         const providers = raw.models?.providers || {};
         for (const p of Object.values(providers)) {
           if (p.models) {
@@ -242,7 +234,7 @@ class OpenClawAdapter extends BaseAdapter {
 
   async listModels() {
     const models = [];
-    const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
+    const configPath = path.join(os.homedir(), '.qclaw', 'openclaw.json');
     try {
       if (fs.existsSync(configPath)) {
         const raw = JSON.parse(fs.readFileSync(configPath, 'utf8'));
@@ -265,10 +257,10 @@ class OpenClawAdapter extends BaseAdapter {
   }
 
   /**
-   * 切换模型：修改 ~/.openclaw/openclaw.json → agents.list[0].model.primary → 重启 gateway
+   * 切换模型：修改 ~/.qclaw/openclaw.json → agents.list[0].model.primary → 重启 gateway
    */
   async switchModel(modelId) {
-    const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
+    const configPath = path.join(os.homedir(), '.qclaw', 'openclaw.json');
     try {
       const raw = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       if (!raw.agents?.list?.[0]) return { success: false, message: '配置中无 agents.list' };
@@ -276,13 +268,17 @@ class OpenClawAdapter extends BaseAdapter {
       raw.agents.list[0].model.primary = modelId;
       fs.writeFileSync(configPath, JSON.stringify(raw, null, 2), 'utf8');
       this._currentModel = modelId;
+      this._modelInfoCache.clear();
+      this._lastModelInfo = null;
       return { success: true, needsRestart: true, model: modelId };
     } catch (e) {
       return { success: false, message: e.message };
     }
   }
 
-  getCurrentModel() { return this._currentModel || this._defaultModel || null; }
+  getCurrentModel() {
+    return this._currentModel || this._defaultModel || null;
+  }
 
   // ========== 私有方法 ==========
 
@@ -300,35 +296,39 @@ class OpenClawAdapter extends BaseAdapter {
   async _waitForReady(timeoutMs) {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
-      try { const data = await this._httpGet('/health'); if (data && data.ok) { this.status = 'running'; return; } } catch (e) {}
+      try {
+        const data = await this._httpGet('/health');
+        if (data && data.ok) { this.status = 'running'; return; }
+      } catch (e) {}
       await new Promise(r => setTimeout(r, 1000));
     }
     throw new Error('网关启动超时');
   }
 
-  _httpHead(p) {
+  _httpHead(path) {
     return new Promise((resolve, reject) => {
-      const url = new URL(p, this.baseUrl);
+      const url = new URL(path, this.baseUrl);
       const req = http.request({ hostname: url.hostname, port: url.port, path: url.pathname, method: 'HEAD', timeout: 3000 }, (res) => { res.resume(); resolve(res.statusCode); });
       req.setTimeout(3000, () => { req.destroy(); reject(new Error('timeout')); });
-      req.on('error', reject); req.end();
+      req.on('error', reject);
+      req.end();
     });
   }
 
-  _httpGet(p) {
+  _httpGet(path) {
     return new Promise((resolve, reject) => {
-      const url = new URL(p, this.baseUrl);
+      const url = new URL(path, this.baseUrl);
       http.get({ hostname: url.hostname, port: url.port, path: url.pathname, method: 'GET', timeout: this._requestTimeout, headers: { 'Authorization': `Bearer ${this.token}`, 'Accept': 'application/json' } }, (res) => {
         let data = '';
         res.on('data', c => data += c);
-        res.on('end', () => { try { resolve(JSON.parse(data)); } catch (e) { reject(new Error(`解析失败`)); } });
+        res.on('end', () => { try { resolve(JSON.parse(data)); } catch (e) { reject(new Error(`解析失败: ${data.substring(0, 100)}`)); } });
       }).on('error', reject).setTimeout(this._requestTimeout, function () { this.destroy(); reject(new Error('请求超时')); });
     });
   }
 
-  _httpPost(p, bodyString) {
+  _httpPost(path, bodyString) {
     return new Promise((resolve, reject) => {
-      const url = new URL(p, this.baseUrl);
+      const url = new URL(path, this.baseUrl);
       const req = http.request({ hostname: url.hostname, port: url.port, path: url.pathname, method: 'POST', timeout: this._requestTimeout, headers: { 'Authorization': `Bearer ${this.token}`, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(bodyString) } }, (res) => {
         let data = '';
         res.on('data', c => data += c);
@@ -338,9 +338,10 @@ class OpenClawAdapter extends BaseAdapter {
         });
       });
       req.setTimeout(this._requestTimeout, () => { req.destroy(); reject(new Error('请求超时')); });
-      req.on('error', reject); req.end(bodyString);
+      req.on('error', reject);
+      req.end(bodyString);
     });
   }
 }
 
-module.exports = OpenClawAdapter;
+module.exports = QClawAdapter;

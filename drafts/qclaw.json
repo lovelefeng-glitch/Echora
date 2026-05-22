@@ -1,0 +1,198 @@
+{
+  "gateway": {
+    "port": 28789,
+    "mode": "local",
+    "bind": "loopback",
+    "authMode": "token",
+    "httpEnabled": true,
+    "controlUiAllowInsecure": null,
+    "tailscaleMode": "off"
+  },
+  "agents": [
+    {
+      "id": "main",
+      "name": "QClaw",
+      "emoji": null,
+      "workspace": null,
+      "modelPrimary": "LongCat-Flash-Lite",
+      "modelFallbacks": [],
+      "reasoningDefault": "stream",
+      "skills": [
+        "another_them",
+        "cloud-upload-backup",
+        "docx",
+        "email-skill",
+        "find-skills",
+        "imap-smtp-email",
+        "mcporter",
+        "multi-search-engine",
+        "neodata-financial-search",
+        "online-search",
+        "pdf",
+        "qclaw-cron-skill",
+        "qclaw-env",
+        "qclaw-rules",
+        "qclaw-skill-creator",
+        "qclaw-text-file",
+        "self-improving",
+        "xbrowser",
+        "xlsx",
+        "fbs_bookwriter",
+        "persona-switch",
+        "project-dev",
+        "wecom-weisheng-scrm",
+        "intel-collector",
+        "knowledge-base",
+        "memory-capture",
+        "openclaw-sysadmin",
+        "openclaw-taskhub",
+        "skill-creation-workflow",
+        "workspace-hygiene",
+        "skillhub-preference"
+      ],
+      "timeoutSeconds": null,
+      "maxConcurrent": null
+    },
+    {
+      "id": "agent-3fefc88f",
+      "name": "代可行",
+      "emoji": "👔",
+      "workspace": "C:\\Users\\ohfen\\.qclaw\\workspace-agent-3fefc88f",
+      "modelPrimary": null,
+      "modelFallbacks": [],
+      "reasoningDefault": "stream",
+      "skills": [
+        "another_them",
+        "cloud-upload-backup",
+        "docx",
+        "email-skill",
+        "find-skills",
+        "imap-smtp-email",
+        "mcporter",
+        "multi-search-engine",
+        "neodata-financial-search",
+        "online-search",
+        "pdf",
+        "qclaw-cron-skill",
+        "qclaw-env",
+        "qclaw-rules",
+        "qclaw-skill-creator",
+        "qclaw-text-file",
+        "self-improving",
+        "xbrowser",
+        "xlsx",
+        "fbs_bookwriter",
+        "persona-switch",
+        "project-dev",
+        "wecom-weisheng-scrm",
+        "intel-collector",
+        "knowledge-base",
+        "memory-capture",
+        "openclaw-sysadmin",
+        "openclaw-taskhub",
+        "skill-creation-workflow",
+        "workspace-hygiene",
+        "skillhub-preference"
+      ],
+      "timeoutSeconds": null,
+      "maxConcurrent": null
+    }
+  ],
+  "models": [
+    {
+      "provider": "qclaw",
+      "baseUrl": "${QCLAW_LLM_BASE_URL}",
+      "api": "openai-completions",
+      "models": [
+        {
+          "id": "modelroute",
+          "name": "modelroute",
+          "contextWindow": null,
+          "maxTokens": null,
+          "input": [
+            "text",
+            "image"
+          ],
+          "reasoning": true,
+          "cost": null,
+          "fullPath": "qclaw/modelroute"
+        },
+        {
+          "id": "pool-deepseek-v4-pro",
+          "name": "DeepSeek-V4-Pro",
+          "contextWindow": null,
+          "maxTokens": null,
+          "input": [
+            "text",
+            "image"
+          ],
+          "reasoning": null,
+          "cost": null,
+          "fullPath": "qclaw/pool-deepseek-v4-pro"
+        },
+        {
+          "id": "pool-minimax-m2.5",
+          "name": "MiniMax-M2.5",
+          "contextWindow": null,
+          "maxTokens": null,
+          "input": [
+            "text",
+            "image"
+          ],
+          "reasoning": null,
+          "cost": null,
+          "fullPath": "qclaw/pool-minimax-m2.5"
+        }
+      ]
+    },
+    {
+      "provider": "custom-1778698233733",
+      "baseUrl": "https://api.longcat.chat/openai",
+      "api": "openai-completions",
+      "models": [
+        {
+          "id": "LongCat-Flash-Thinking-2601",
+          "name": "LongCat-Flash-Thinking-2601",
+          "contextWindow": null,
+          "maxTokens": null,
+          "input": [],
+          "reasoning": null,
+          "cost": null,
+          "fullPath": "custom-1778698233733/LongCat-Flash-Thinking-2601"
+        }
+      ]
+    },
+    {
+      "provider": "custom-1779333725964",
+      "baseUrl": "https://api.longcat.chat/openai",
+      "api": "openai-completions",
+      "models": [
+        {
+          "id": "LongCat-Flash-Lite",
+          "name": "LongCat-Flash-Lite",
+          "contextWindow": null,
+          "maxTokens": null,
+          "input": [],
+          "reasoning": null,
+          "cost": null,
+          "fullPath": "custom-1779333725964/LongCat-Flash-Lite"
+        }
+      ]
+    }
+  ],
+  "session": {
+    "resetMode": null,
+    "dmScope": "per-channel-peer",
+    "maxHistory": null
+  },
+  "tools": {
+    "allowBash": null,
+    "allowNetwork": null,
+    "toolTimeout": null
+  },
+  "browser": {
+    "enabled": true,
+    "engine": null
+  },
+  "port": 28789
+}

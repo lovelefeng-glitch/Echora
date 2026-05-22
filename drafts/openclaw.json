@@ -1,0 +1,444 @@
+{
+  "gateway": {
+    "port": 18789,
+    "mode": "local",
+    "bind": "loopback",
+    "authMode": "token",
+    "httpEnabled": true,
+    "controlUiAllowInsecure": true,
+    "tailscaleMode": "off"
+  },
+  "agents": [
+    {
+      "id": "wechat",
+      "name": "阿呆",
+      "emoji": null,
+      "workspace": "C:\\Users\\ohfen\\.openclaw\\workspace-wechat",
+      "modelPrimary": "xiaomi-coding/mimo-v2.5",
+      "modelFallbacks": [
+        "wechat-longcat/LongCat-Flash-Thinking",
+        "xiaomi-coding/mimo-v2.5",
+        "xue-longcat/LongCat-Flash-Thinking-2601"
+      ],
+      "reasoningDefault": null,
+      "skills": [],
+      "timeoutSeconds": null,
+      "maxConcurrent": null
+    },
+    {
+      "id": "baom",
+      "name": "管家",
+      "emoji": null,
+      "workspace": "C:\\Users\\ohfen\\.openclaw\\workspace-baom",
+      "modelPrimary": "xiaomi-coding/mimo-v2.5",
+      "modelFallbacks": [
+        "xiaomi-coding/mimo-v2.5",
+        "1285/gpt-5.5"
+      ],
+      "reasoningDefault": null,
+      "skills": [],
+      "timeoutSeconds": null,
+      "maxConcurrent": null
+    },
+    {
+      "id": "xue",
+      "name": "小雪",
+      "emoji": null,
+      "workspace": "C:\\Users\\ohfen\\.openclaw\\workspace-xue",
+      "modelPrimary": "xiaomi-coding/mimo-v2.5",
+      "modelFallbacks": [
+        "xiaomi-coding/mimo-v2.5",
+        "eduuser005-nvidia/deepseek-ai/deepseek-v4-pro",
+        "3760/gpt-5.5"
+      ],
+      "reasoningDefault": null,
+      "skills": [],
+      "timeoutSeconds": null,
+      "maxConcurrent": null
+    }
+  ],
+  "models": [
+    {
+      "provider": "1285",
+      "baseUrl": "https://api.freemodel.dev",
+      "api": "openai-responses",
+      "models": [
+        {
+          "id": "gpt-5.5",
+          "name": "gpt-5.5 (1285)",
+          "contextWindow": 400000,
+          "maxTokens": 8096,
+          "input": [
+            "text",
+            "image"
+          ],
+          "reasoning": true,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "fullPath": "1285/gpt-5.5"
+        },
+        {
+          "id": "gpt-5.4",
+          "name": "gpt-5.4 (1285)",
+          "contextWindow": 400000,
+          "maxTokens": 8096,
+          "input": [
+            "text",
+            "image"
+          ],
+          "reasoning": true,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "fullPath": "1285/gpt-5.4"
+        },
+        {
+          "id": "gpt-5.4-mini",
+          "name": "gpt-5.4-mini (1285)",
+          "contextWindow": 400000,
+          "maxTokens": 8096,
+          "input": [
+            "text",
+            "image"
+          ],
+          "reasoning": true,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "fullPath": "1285/gpt-5.4-mini"
+        }
+      ]
+    },
+    {
+      "provider": "3760",
+      "baseUrl": "https://api.freemodel.dev",
+      "api": "openai-responses",
+      "models": [
+        {
+          "id": "gpt-5.5",
+          "name": "gpt-5.5 (3760)",
+          "contextWindow": 400000,
+          "maxTokens": 8096,
+          "input": [
+            "text",
+            "image"
+          ],
+          "reasoning": true,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "fullPath": "3760/gpt-5.5"
+        },
+        {
+          "id": "gpt-5.4",
+          "name": "gpt-5.4 (3760)",
+          "contextWindow": 400000,
+          "maxTokens": 8096,
+          "input": [
+            "text",
+            "image"
+          ],
+          "reasoning": true,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "fullPath": "3760/gpt-5.4"
+        },
+        {
+          "id": "gpt-5.4-mini",
+          "name": "gpt-5.4-mini (3760)",
+          "contextWindow": 400000,
+          "maxTokens": 8096,
+          "input": [
+            "text",
+            "image"
+          ],
+          "reasoning": true,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "fullPath": "3760/gpt-5.4-mini"
+        }
+      ]
+    },
+    {
+      "provider": "custom-integrate-api-nvidia-com",
+      "baseUrl": "https://integrate.api.nvidia.com/v1",
+      "api": "openai-completions",
+      "models": [
+        {
+          "id": "qwen/qwen3.5-122b-a10b",
+          "name": "qwen/qwen3.5-122b-a10b (Custom Provider)",
+          "contextWindow": 260000,
+          "maxTokens": 4096,
+          "input": [
+            "text"
+          ],
+          "reasoning": false,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "fullPath": "custom-integrate-api-nvidia-com/qwen/qwen3.5-122b-a10b"
+        }
+      ]
+    },
+    {
+      "provider": "xiaomi-coding",
+      "baseUrl": "https://token-plan-cn.xiaomimimo.com/v1",
+      "api": "openai-completions",
+      "models": [
+        {
+          "id": "mimo-v2.5-pro",
+          "name": "mimo-v2.5-pro",
+          "contextWindow": 1048576,
+          "maxTokens": 32000,
+          "input": [
+            "text"
+          ],
+          "reasoning": true,
+          "cost": null,
+          "fullPath": "xiaomi-coding/mimo-v2.5-pro"
+        },
+        {
+          "id": "mimo-v2.5",
+          "name": "mimo-v2.5",
+          "contextWindow": 1048576,
+          "maxTokens": 32000,
+          "input": [
+            "text",
+            "image"
+          ],
+          "reasoning": true,
+          "cost": null,
+          "fullPath": "xiaomi-coding/mimo-v2.5"
+        }
+      ]
+    },
+    {
+      "provider": "lele-nvidia",
+      "baseUrl": "https://integrate.api.nvidia.com/v1",
+      "api": "openai-completions",
+      "models": [
+        {
+          "id": "qwen/qwen3.5-122b-a10b",
+          "name": "qwen/qwen3.5-122b-a10b (xiaoming)",
+          "contextWindow": 260000,
+          "maxTokens": 8096,
+          "input": [
+            "text"
+          ],
+          "reasoning": false,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "fullPath": "lele-nvidia/qwen/qwen3.5-122b-a10b"
+        }
+      ]
+    },
+    {
+      "provider": "xue-longcat",
+      "baseUrl": "https://api.longcat.chat/openai",
+      "api": "openai-completions",
+      "models": [
+        {
+          "id": "LongCat-Flash-Thinking-2601",
+          "name": "LongCat-Flash-Thinking-2601 (xue)",
+          "contextWindow": 260000,
+          "maxTokens": 8096,
+          "input": [
+            "text"
+          ],
+          "reasoning": false,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "fullPath": "xue-longcat/LongCat-Flash-Thinking-2601"
+        }
+      ]
+    },
+    {
+      "provider": "eduuser001-nvidia",
+      "baseUrl": "https://integrate.api.nvidia.com/v1",
+      "api": "openai-completions",
+      "models": [
+        {
+          "id": "deepseek-ai/deepseek-v4-pro",
+          "name": "deepseek-ai/deepseek-v4-pro (001)",
+          "contextWindow": 1000000,
+          "maxTokens": 8096,
+          "input": [
+            "text"
+          ],
+          "reasoning": false,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "fullPath": "eduuser001-nvidia/deepseek-ai/deepseek-v4-pro"
+        }
+      ]
+    },
+    {
+      "provider": "eduuser002-nvidia",
+      "baseUrl": "https://integrate.api.nvidia.com/v1",
+      "api": "openai-completions",
+      "models": [
+        {
+          "id": "deepseek-ai/deepseek-v4-pro",
+          "name": "deepseek-ai/deepseek-v4-pro (002)",
+          "contextWindow": 1000000,
+          "maxTokens": 8096,
+          "input": [
+            "text"
+          ],
+          "reasoning": false,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "fullPath": "eduuser002-nvidia/deepseek-ai/deepseek-v4-pro"
+        }
+      ]
+    },
+    {
+      "provider": "eduuser003-nvidia",
+      "baseUrl": "https://integrate.api.nvidia.com/v1",
+      "api": "openai-completions",
+      "models": [
+        {
+          "id": "deepseek-ai/deepseek-v4-pro",
+          "name": "deepseek-ai/deepseek-v4-pro (003)",
+          "contextWindow": 1000000,
+          "maxTokens": 8096,
+          "input": [
+            "text"
+          ],
+          "reasoning": false,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "fullPath": "eduuser003-nvidia/deepseek-ai/deepseek-v4-pro"
+        }
+      ]
+    },
+    {
+      "provider": "eduuser004-nvidia",
+      "baseUrl": "https://integrate.api.nvidia.com/v1",
+      "api": "openai-completions",
+      "models": [
+        {
+          "id": "deepseek-ai/deepseek-v4-pro",
+          "name": "deepseek-ai/deepseek-v4-pro (004)",
+          "contextWindow": 1000000,
+          "maxTokens": 8096,
+          "input": [
+            "text"
+          ],
+          "reasoning": false,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "fullPath": "eduuser004-nvidia/deepseek-ai/deepseek-v4-pro"
+        }
+      ]
+    },
+    {
+      "provider": "eduuser005-nvidia",
+      "baseUrl": "https://integrate.api.nvidia.com/v1",
+      "api": "openai-completions",
+      "models": [
+        {
+          "id": "deepseek-ai/deepseek-v4-pro",
+          "name": "deepseek-ai/deepseek-v4-pro (005)",
+          "contextWindow": 1000000,
+          "maxTokens": 8096,
+          "input": [
+            "text"
+          ],
+          "reasoning": false,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "fullPath": "eduuser005-nvidia/deepseek-ai/deepseek-v4-pro"
+        }
+      ]
+    },
+    {
+      "provider": "wechat-longcat",
+      "baseUrl": "https://api.longcat.chat/openai",
+      "api": "openai-completions",
+      "models": [
+        {
+          "id": "LongCat-Flash-Thinking",
+          "name": "LongCat-Flash-Thinking (wechat)",
+          "contextWindow": 260000,
+          "maxTokens": 8096,
+          "input": [
+            "text"
+          ],
+          "reasoning": false,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "fullPath": "wechat-longcat/LongCat-Flash-Thinking"
+        }
+      ]
+    }
+  ],
+  "session": {
+    "resetMode": null,
+    "dmScope": "per-channel-peer",
+    "maxHistory": null
+  },
+  "tools": {
+    "allowBash": null,
+    "allowNetwork": null,
+    "toolTimeout": null
+  },
+  "browser": {},
+  "port": 18789
+}

@@ -12,16 +12,22 @@
 
 | 模块 | 文件 | 详细索引 | 行数 | 状态 |
 |------|------|----------|------|------|
-| 主进程 | `main.js` | [→](#mainjs) | ~140 | ✅ |
+| 主进程 | `main.js` | [→](#mainjs) | ~843 | ✅ |
 | 预加载 | `preload.js` | [preload.md](preload.md) | ~85 | ✅ |
-| 渲染进程 | `src/ui/renderer.js` | [renderer.md](renderer.md) | ~430 | ✅ |
+| 渲染进程 | `src/ui/renderer.js` | [renderer.md](renderer.md) | ~2125 | ✅ |
 | AI 检测器 | `src/detectors/ai-detector.js` | [ai-detector.md](ai-detector.md) | ~350 | ✅ v0.3 三层发现 |
 | 环境检查器 | src/detectors/env-checker.js | [env-checker.md](env-checker.md) | ~170 | ✅ |\n| 端口扫描器 | src/detectors/port-scanner.js | [port-scanner.md](port-scanner.md) | ~220 | ✅ 新增 F-3 |\n| 状态读取器 | src/detectors/state-reader.js | [state-reader.md](state-reader.md) | ~170 | ✅ 新增 F-3 |
 | 网关管理器 | `src/manager/gateway-manager.js` | [gateway-manager.md](gateway-manager.md) | ~160 | ✅ |
 | 配置管理器 | `src/manager/config-manager.js` | [config-manager.md](config-manager.md) | ~80 | ✅ |
-| 适配器基类 | `src/adapters/base-adapter.js` | [adapters.md](adapters.md) |
-| Hermes 适配器 | src/adapters/hermes-adapter.js | [adapters.md](adapters.md) | ~300 | ✅ v3.0 Gateway API | ~72 | ✅ |
-| OpenClaw 适配器 | src/adapters/openclaw-adapter.js | [adapters.md](adapters.md) | ~150 | ✅ | ⚠️ Bug |
+| 配置读取器 | `src/manager/config-reader.js` | [config-reader.md](config-reader.md) | ~430 | ✅ v2.0 |
+| 草稿管理器 | `src/manager/draft-manager.js` | [draft-manager.md](draft-manager.md) | ~313 | ✅ v1.0 |
+| 适配器基类 | `src/adapters/base-adapter.js` | [adapters.md](adapters.md) | ~72 | ✅ |
+| QClaw 适配器 | `src/adapters/qclaw-adapter.js` | [adapters.md](adapters.md) | ~150 | ✅ v1.0 |
+| OpenClaw 适配器 | `src/adapters/openclaw-adapter.js` | [adapters.md](adapters.md) | ~150 | ✅ v1.2 |
+| Hermes 适配器 | `src/adapters/hermes-adapter.js` | [adapters.md](adapters.md) | ~1046 | ✅ v3.2 |
+| Echora Proxy | `src/proxy/echora-proxy.js` | [echora-proxy.md](echora-proxy.md) | ~296 | ✅ v1.0 |
+| API Server | `src/api-server.js` | [api-server.md](api-server.md) | ~118 | ✅ v1.0 |
+| 测试套件 | `tests/` | — | — | ✅ Playwright 脚手架 |
 
 ---
 
@@ -54,6 +60,16 @@
 | `agent:list` | handle | — | `aiType` | `[{ id, name, emoji, description }]` |
 | `dialog:openFile` | handle | — | `options` | `{ canceled, filePaths }` |
 | `dialog:openDir` | handle | — | `options` | `{ canceled, filePaths }` |
+| `draft:read` | handle | — | `aiType` | `{ success, data }` |
+| `draft:write` | handle | — | `(aiType, data)` | `{ success }` |
+| `draft:save` | handle | — | `aiType` | `{ success, error? }` |
+| `draft:reset` | handle | — | `aiType` | `{ success, error? }` |
+| `draft:backups` | handle | — | `aiType` | `string[]` |
+| `draft:paths` | handle | — | — | `{ qclaw:{original,draft}, ... }` |
+| `ai-config:set-path` | handle | — | `(aiType, filePath)` | `true` |
+| `ai-config:read` | handle | — | `aiType` | `{ success, data }` |
+| `ai-config:discover` | handle | — | — | `{ qclaw, openclaw, hermes }` |
+| `ai-config:list` | handle | — | — | `{ aiType: {path,status,preview} }` |
 
 ### 推送事件
 
@@ -73,4 +89,9 @@
 | `runStartupChecks()` | 启动四步流程 |
 | `safeSend(channel, data)` | 安全推送（窗口可能已销毁） |
 | `createWindow()` | Electron BrowserWindow 创建 |
+
+---
+
+**最后更新**: 2026-05-23 04:55  
+**更新人**: 小雪 (xue)
 

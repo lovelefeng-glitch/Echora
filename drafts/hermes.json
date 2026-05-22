@@ -1,0 +1,66 @@
+{
+  "model": {
+    "default": "LongCat-Flash-Lite",
+    "main": "deepseek-ai/deepseek-v4-pro",
+    "maxTokens": 32768,
+    "temperature": null,
+    "topP": null
+  },
+  "agent": {
+    "maxTurns": 90,
+    "gatewayTimeout": 1800,
+    "reasoningEffort": "minimal"
+  },
+  "memory": {
+    "enabled": null,
+    "backend": null,
+    "maxEntries": null
+  },
+  "compression": {
+    "enabled": true,
+    "windowSize": null,
+    "truncateMode": null
+  },
+  "delegation": {
+    "enabled": null,
+    "agents": []
+  },
+  "browser": {
+    "engine": "auto",
+    "path": null
+  },
+  "security": {
+    "sandbox": null,
+    "approvalMode": null
+  },
+  "display": {
+    "language": "en",
+    "theme": null
+  },
+  "approvals": {
+    "mode": "manual",
+    "autoApprove": null
+  },
+  "sessions": {
+    "maxActive": null,
+    "idleTimeout": null
+  },
+  "cron": {
+    "enabled": null,
+    "jobs": []
+  },
+  "toolsets": {
+    "enabled": null,
+    "tools": []
+  },
+  "apiServer": {},
+  "agents": [],
+  "models": [],
+  "profiles": [
+    {
+      "name": "minmin",
+      "configPath": "C:\\Users\\ohfen\\AppData\\Local\\hermes\\profiles\\minmin\\config.yaml"
+    }
+  ],
+  "port": null
+}

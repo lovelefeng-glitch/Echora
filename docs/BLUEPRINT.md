@@ -1,4 +1,4 @@
-# Echora 项目蓝图 v0.3.5
+# Echora 项目蓝图 v0.4.0
 
 > **唯一真实来源（Single Source of Truth）**  
 > 任何开发前必须先读此文件和对应的模块文档。  
@@ -43,7 +43,8 @@
 │  detectors/port-scanner.js  → 端口扫描 + HTTP 探测          │
 │  detectors/state-reader.js  → 网关状态文件读取               │
 │  manager/config-manager.js  → 配置持久化                     │
-│  manager/config-reader.js   → AI 配置文件解析（JSON/YAML）   │
+│  manager/config-reader.js   → AI 配置解析 + normalize        │
+│  manager/draft-manager.js   → 配置草稿系统 + denormalize     │
 │  adapters/base-adapter.js   → 适配器接口规范                │
 │  adapters/openclaw-adapter.js → OpenClaw/QClaw API 实现     │
 │  adapters/hermes-adapter.js → Hermes Gateway API 实现       │
@@ -89,7 +90,21 @@ runStartupChecks()
     └─ 发送 gateway:statusAll 到 renderer
 ```
 
-### 3.2 用户操作数据流
+### 3.2 配置编辑数据流（DraftManager）
+
+```
+启动: 原配置文件 ──read──→ rawData ──normalize──→ 草稿文件 (drafts/)
+编辑: UI 渲染器 ←──readDraft──→ 草稿文件 ←──writeDraft──→ UI
+保存: 草稿文件 ──read──→ draftData ──denormalize──→ 原配置文件
+                      └── 备份原配置 → backups/
+重置: 原配置文件 ──readRaw──→ rawData ──normalize──→ 覆盖草稿
+```
+
+> ⚠️ **normalize/denormalize 必要性**: 原配置的嵌套结构（如 `gateway.auth.mode`）
+> 与 UI 渲染器期望的扁平结构（如 `gateway.authMode`）不一致。
+> 详见 `docs/code-index/draft-manager.md` 和 `docs/code-index/config-reader.md`。
+
+### 3.3 用户操作数据流
 
 | 操作 | Renderer 事件 | Main IPC | 结果 |
 |------|---------------|---------|------|
@@ -147,7 +162,34 @@ runStartupChecks()
 }
 ```
 
-### 4.3 GatewayManager.processes 内部结构
+### 4.3 DraftManager 草稿文件结构（normalized）
+
+草稿文件存储在 `drafts/{aiType}.json`，格式由 `ConfigReader.normalize()` 生成：
+
+```jsonc
+// drafts/openclaw.json 示例（已 normalize）
+{
+  "gateway": {
+    "port": 18789,
+    "authMode": "token",           // ← 原始: gateway.auth.mode
+    "controlUiAllowInsecure": true  // ← 原始: gateway.controlUi.allowInsecureAuth
+  },
+  "agents": [                       // ← 原始: agents.list (对象→数组)
+    { "id": "xue", "name": "小雪", "modelPrimary": "xiaomi-coding/mimo-v2.5", ... }
+  ],
+  "models": [                       // ← 原始: models.providers (对象→数组)
+    { "provider": "xiaomi-coding", "baseUrl": "...", "models": [...] }
+  ],
+  "session": { "resetMode": "daily", ... },
+  "tools": { "allowBash": true, ... },
+  "browser": { "enabled": true, ... }
+}
+```
+
+> ⚠️ **踩坑记录 (2026-05-23)**: 最初未经过 normalize，直接复制原配置到草稿，
+> 导致 UI 渲染器读到嵌套结构，设置页参数大量“丢失”。
+
+### 4.4 GatewayManager.processes 内部结构
 
 ```js
 // this.processes: Map<aiType, procInfo>
@@ -195,13 +237,18 @@ class BaseAdapter {
 | 环境检查器 | `src/detectors/env-checker.js` | Node/Python/Git/npm 检测 | ✅ 完成 |
 | 网关管理器 | `src/manager/gateway-manager.js` | 网关生命周期 | ✅ v0.2 完成 |
 | 配置管理器 | `src/manager/config-manager.js` | 持久化配置 | ✅ 完成 |
+| 配置读取器 | `src/manager/config-reader.js` | AI 配置解析 + normalize + 发现 | ✅ v2.0 |
+| 草稿管理器 | `src/manager/draft-manager.js` | 配置草稿系统 + denormalize | ✅ v1.0 |
 | 适配器基类 | `src/adapters/base-adapter.js` | 接口规范 | ✅ 完成 |
-| OpenClaw 适配器 | `src/adapters/openclaw-adapter.js` | OpenClaw/QClaw API | ✅ v1.0 |
+| OpenClaw 适配器 | `src/adapters/openclaw-adapter.js` | OpenClaw/QClaw API | ✅ v1.2 |
+| QClaw 适配器 | `src/adapters/qclaw-adapter.js` | QClaw 独立适配器 | ✅ v1.0 |
 | Hermes 适配器 | `src/adapters/hermes-adapter.js` | Hermes Gateway API Server | ✅ v3.2 |
 | Cursor 适配器 | `src/adapters/cursor-adapter.js` | Cursor 本地检测 | ✅ v1.0 |
-| 配置读取器 | `src/manager/config-reader.js` | AI 配置文件解析（JSON/YAML）| ✅ 完成 |
 | 端口扫描器 | `src/detectors/port-scanner.js` | 端口扫描 + HTTP 探测 | ✅ 完成 |
 | 状态读取器 | `src/detectors/state-reader.js` | 网关状态文件读取 | ✅ 完成 |
+| Echora Proxy | `src/proxy/echora-proxy.js` | SSE 拦截 + metrics 注入 | ✅ v1.0 |
+| API Server | `src/api-server.js` | HTTP API 接口 | ✅ v1.0 |
+| 测试套件 | `tests/` | Playwright Electron 自动化测试 | ✅ 脚手架 |
 
 ---
 
@@ -246,6 +293,6 @@ class BaseAdapter {
 
 ---
 
-**最后更新**: 2026-05-20 06:55  
+**最后更新**: 2026-05-23 04:55  
 **更新人**: 小雪 (xue)  
 **审核人**: 老板

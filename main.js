@@ -4,6 +4,7 @@
 
 const { app, BrowserWindow, ipcMain, dialog, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { spawn, exec } = require('child_process');
 
 // ---------- 模块加载 ----------
@@ -12,10 +13,12 @@ const AIDetector = require('./src/detectors/ai-detector');
 const GatewayManager = require('./src/manager/gateway-manager');
 const ConfigManager = require('./src/manager/config-manager');
 const OpenClawAdapter = require('./src/adapters/openclaw-adapter');
+const QClawAdapter = require('./src/adapters/qclaw-adapter');
 const HermesAdapter = require('./src/adapters/hermes-adapter');
 const { server: proxyServer, PROXY_PORT: PROXY_PORT_NUM } = require('./src/proxy/echora-proxy');
 const CursorAdapter = require('./src/adapters/cursor-adapter');
 const ConfigReader = require('./src/manager/config-reader');
+const DraftManager = require('./src/manager/draft-manager');
 const { createAPIServer } = require('./src/api-server');
 
 // ---------- 全局状态 ----------
@@ -193,7 +196,10 @@ async function runStartupChecks() {
     configManager.set('firstRun', false);
   }
 
-  // 6. 启动定期状态轮询（每 10 秒）
+  // 6. 初始化草稿文件（原配置 → drafts/）
+  DraftManager.initAll();
+
+  // 7. 启动定期状态轮询（每 10 秒）
   startStatusPolling();
 }
 
@@ -243,10 +249,9 @@ function stopStatusPolling() {
   }
 }
 
-// ---------- 加载 QClaw Gateway 配置（token） ----------
+// ---------- 加载各 AI 配置（token） ----------
 function loadQclawConfig() {
   try {
-    const fs = require('fs');
     const home = process.env.USERPROFILE || process.env.HOME || '~';
     const cfg = JSON.parse(fs.readFileSync(path.join(home, '.qclaw', 'openclaw.json'), 'utf8'));
     qclawToken = cfg.gateway?.auth?.token || '';
@@ -255,6 +260,27 @@ function loadQclawConfig() {
   } catch (e) {
     console.warn('[Echora] QClaw config not found:', e.message);
   }
+}
+
+let openclawToken = '';
+let openclawPort = 18789;
+
+function loadOpenClawConfig() {
+  try {
+    const home = process.env.USERPROFILE || process.env.HOME || '~';
+    const cfg = JSON.parse(fs.readFileSync(path.join(home, '.openclaw', 'openclaw.json'), 'utf8'));
+    openclawToken = cfg.gateway?.auth?.token || '';
+    openclawPort = cfg.gateway?.port || 18789;
+    console.log('[Echora] OpenClaw token loaded (port %d)', openclawPort);
+  } catch (e) {
+    console.warn('[Echora] OpenClaw config not found:', e.message);
+  }
+}
+
+function loadTokenForAI(aiType) {
+  if (aiType === 'qclaw') return qclawToken;
+  if (aiType === 'openclaw') return openclawToken;
+  return '';
 }
 
 // ---------- 端口查找 ----------
@@ -270,7 +296,8 @@ function getGatewayPort(aiType) {
 function getOrCreateAdapter(aiType, port) {
   // 优先从 gatewayManager 拿真实端口
   const realPort = port || getGatewayPort(aiType);
-  const finalPort = realPort || DEFAULT_PORTS[aiType] || qclawPort;
+  const defaultPort = aiType === 'openclaw' ? 18789 : (aiType === 'qclaw' ? 28789 : 8085);
+  const finalPort = realPort || DEFAULT_PORTS[aiType] || defaultPort;
   const baseUrl = `http://127.0.0.1:${finalPort}`;
 
   // 已有适配器 — Hermes 强制更新为代理端口（跳过端口嗅探）
@@ -294,11 +321,20 @@ function getOrCreateAdapter(aiType, port) {
       token: process.env.API_SERVER_KEY || '',
       baseUrl: 'http://127.0.0.1:8085',
     });
+  } else if (aiType === 'qclaw') {
+    adapter = new QClawAdapter({
+      port: finalPort,
+      token: qclawToken,
+      baseUrl,
+      exePath: configManager?.get('aiPaths')?.qclaw || '',
+    });
   } else {
+    // OpenClaw 和其他 AI 类型
+    const ocToken = loadTokenForAI('openclaw');
     adapter = new OpenClawAdapter({
       aiType,
       port: finalPort,
-      token: qclawToken,
+      token: ocToken,
       baseUrl,
     });
   }
@@ -543,6 +579,38 @@ function setupIPC() {
     return configManager.getAll();
   });
 
+  // === 草稿文件操作 ===
+  ipcMain.handle('draft:read', async (event, aiType) => {
+    return DraftManager.readDraft(aiType);
+  });
+
+  ipcMain.handle('draft:write', async (event, aiType, data) => {
+    return DraftManager.writeDraft(aiType, data);
+  });
+
+  ipcMain.handle('draft:save', async (event, aiType) => {
+    return DraftManager.saveToOriginal(aiType);
+  });
+
+  ipcMain.handle('draft:reset', async (event, aiType) => {
+    return DraftManager.resetDraft(aiType);
+  });
+
+  ipcMain.handle('draft:backups', async (event, aiType) => {
+    return DraftManager.listBackups(aiType);
+  });
+
+  ipcMain.handle('draft:paths', async () => {
+    const paths = {};
+    for (const aiType of ['qclaw', 'openclaw', 'hermes']) {
+      paths[aiType] = {
+        original: DraftManager.getOriginalPath(aiType),
+        draft: DraftManager.getDraftPath(aiType),
+      };
+    }
+    return paths;
+  });
+
   // AI 软件路径管理
   ipcMain.handle('ai:setPath', async (event, aiType, exePath) => {
     const paths = configManager.get('aiPaths') || {};
@@ -740,6 +808,7 @@ app.whenReady().then(async () => {
 
   gatewayManager = new GatewayManager();
   loadQclawConfig();
+  loadOpenClawConfig();
   setupIPC();
   createWindow();
   createTray();

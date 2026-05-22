@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Echora 草稿文件架构 - 思维导图</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, 'Microsoft YaHei', sans-serif; background: #0d1117; color: #c9d1d9; padding: 20px; }
+h1 { text-align: center; font-size: 20px; margin-bottom: 20px; color: #58a6ff; }
+.mindmap { max-width: 1000px; margin: 0 auto; }
+.node { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 16px; margin: 8px 0; }
+.node-root { background: #1f3a5f; border-color: #58a6ff; font-size: 16px; font-weight: bold; text-align: center; }
+.node-group { background: #1a2332; border-color: #388bfd; margin-left: 20px; }
+.node-child { margin-left: 40px; border-color: #30363d; font-size: 13px; }
+.node-green { border-left: 3px solid #3fb950; }
+.node-yellow { border-left: 3px solid #d29922; }
+.node-red { border-left: 3px solid #f85149; }
+.node-blue { border-left: 3px solid #58a6ff; }
+.node-purple { border-left: 3px solid #bc8cff; }
+.title { font-weight: bold; color: #f0f6fc; margin-bottom: 4px; }
+.desc { color: #8b949e; font-size: 12px; }
+.tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 3px; margin-left: 6px; }
+.tag-read { background: #1a3a2a; color: #3fb950; }
+.tag-write { background: #3a1a1a; color: #f85149; }
+.tag-preview { background: #2a2a1a; color: #d29922; }
+.tag-safe { background: #1a2a3a; color: #58a6ff; }
+.arrow { color: #58a6ff; font-size: 14px; margin: 4px 0 4px 20px; }
+.section { background: #0d1117; border: 2px dashed #30363d; border-radius: 12px; padding: 12px; margin: 12px 0; }
+.section-title { font-size: 12px; color: #8b949e; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+.flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+.flow-box { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 6px 12px; font-size: 12px; }
+.flow-arrow { color: #58a6ff; font-size: 16px; }
+.warning { background: #3a2a1a; border: 1px solid #d29922; border-radius: 6px; padding: 8px 12px; margin: 8px 0; font-size: 12px; }
+.warning::before { content: '⚠️ '; }
+.question { background: #2a1a3a; border: 1px solid #bc8cff; border-radius: 6px; padding: 8px 12px; margin: 8px 0; font-size: 12px; }
+.question::before { content: '❓ '; }
+.ok { background: #1a2a1a; border: 1px solid #3fb950; border-radius: 6px; padding: 8px 12px; margin: 8px 0; font-size: 12px; }
+.ok::before { content: '✅ '; }
+</style>
+</head>
+<body>
+<h1>🧭 Echora 草稿文件架构 — 思维导图</h1>
+
+<div class="mindmap">
+
+<!-- 核心概念 -->
+<div class="node node-root">📄 草稿文件系统（Draft File System）<br><span class="desc">配置编辑的「安全缓冲层」— 原文件永远安全</span></div>
+
+<!-- 文件A是什么 -->
+<div class="node node-group">
+  <div class="title">📁 文件A 是什么？</div>
+  <div class="desc">每个 AI 类型各有一个草稿文件</div>
+</div>
+<div class="node node-child node-blue">
+  <div class="title">文件A = 原配置的「可编辑副本」</div>
+  <div class="desc">存储路径: ~/.echora/drafts/{aiType}.json</div>
+  <div class="desc">QClaw → drafts/qclaw.json | OpenClaw → drafts/openclaw.json | Hermes → drafts/hermes.yaml</div>
+</div>
+
+<!-- 生命周期 -->
+<div class="node node-group">
+  <div class="title">🔄 文件A 的生命周期</div>
+</div>
+
+<div class="section">
+  <div class="section-title">阶段 1: 启动时初始化</div>
+  <div class="flow">
+    <div class="flow-box">Echora 启动</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box">异步读取原配置文件</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box">复制到 drafts/{aiType}.json</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box">文件A 就绪</div>
+  </div>
+  <div class="ok">原配置文件只在此时被「只读」访问一次</div>
+</div>
+
+<div class="section">
+  <div class="section-title">阶段 2: 编辑中（用户操作）</div>
+  <div class="flow">
+    <div class="flow-box">用户修改参数</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box">实时写入文件A</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box">UI 实时刷新</div>
+  </div>
+  <div class="ok">所有修改只影响文件A，原配置完全不动</div>
+  <div class="ok">刷新/离开页面 → 文件A 内容保留（不丢失）</div>
+  <div class="ok">再次进入设置页 → 默认加载文件A</div>
+</div>
+
+<div class="section">
+  <div class="section-title">阶段 3: 保存（用户确认）</div>
+  <div class="flow">
+    <div class="flow-box">点击「保存」</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box">文件A 内容</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box">写入原配置文件</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box">重启 Gateway</div>
+  </div>
+  <div class="warning">只有此时才写入原文件（不可逆操作）</div>
+</div>
+
+<div class="section">
+  <div class="section-title">阶段 4: 重置（用户放弃）</div>
+  <div class="flow">
+    <div class="flow-box">点击「重置」</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box">原配置文件</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box">重新复制到文件A</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box">UI 刷新为原始值</div>
+  </div>
+  <div class="ok">文件A 被覆盖，所有未保存修改丢失</div>
+  <div class="ok">原配置文件始终安全</div>
+</div>
+
+<!-- 联动效果 -->
+<div class="node node-group">
+  <div class="title">🔗 联动效果（文件A 的价值）</div>
+</div>
+
+<div class="node node-child node-green">
+  <div class="title">场景 1: 修改提供商 ID</div>
+  <div class="desc">用户将 "xiaomi-coding" 改为 "xiaoxiaomi"</div>
+  <div class="desc">→ 文件A 中所有 "xiaomi-coding/" 前缀自动更新</div>
+  <div class="desc">→ 完整路径: xiaoxiaomi/mimo-v2.5</div>
+  <div class="desc">→ Agent 主模型下拉框实时显示新路径</div>
+</div>
+
+<div class="node node-child node-green">
+  <div class="title">场景 2: 模型下拉框</div>
+  <div class="desc">Agent 主模型字段 → 改为下拉框</div>
+  <div class="desc">→ 从文件A 读取所有模型完整路径</div>
+  <div class="desc">→ 用户选择而非手动输入</div>
+  <div class="desc">→ 备用模型 → 多选填入</div>
+</div>
+
+<div class="node node-child node-green">
+  <div class="title">场景 3: 实时预览</div>
+  <div class="desc">修改上下文长度 400000 → 800000</div>
+  <div class="desc">→ 文件A 更新 → Agent 列表中的模型信息同步变化</div>
+  <div class="desc">→ 用户看到「修改后的效果」</div>
+</div>
+
+<!-- 数据流 -->
+<div class="node node-group">
+  <div class="title">📊 数据流图</div>
+</div>
+
+<div class="node node-child" style="font-family:monospace;font-size:12px;line-height:1.8;">
+┌─────────────┐     只读复制     ┌─────────────┐<br>
+│  原配置文件  │ ──────────────→ │   文件A     │<br>
+│ (不可变)    │ ←────────────── │ (草稿副本)  │<br>
+└─────────────┘   用户点「保存」  └─────────────┘<br>
+       │                                  ↑<br>
+       │ 只读访问                       │ 读写<br>
+       ↓                                  ↓<br>
+┌─────────────┐                   ┌─────────────┐<br>
+│  启动初始化  │                   │  UI 编辑层  │<br>
+│  (一次性)   │                   │ (实时预览)  │<br>
+└─────────────┘                   └─────────────┘<br>
+</div>
+
+<!-- 安全保证 -->
+<div class="node node-group">
+  <div class="title">🛡️ 安全保证</div>
+</div>
+
+<div class="node node-child node-blue">
+  <div class="ok">原配置文件：只在「启动复制」和「用户保存」时被访问</div>
+  <div class="ok">编辑过程中：所有操作只针对文件A</div>
+  <div class="ok">用户刷新页面：文件A 不丢失（持久化在磁盘）</div>
+  <div class="ok">用户点重置：文件A 被原配置覆盖（安全回滚）</div>
+  <div class="ok">不同 AI：各自独立的草稿文件（互不干扰）</div>
+</div>
+
+<!-- 待确认问题 -->
+<div class="node node-group">
+  <div class="title">❓ 待确认问题</div>
+</div>
+
+<div class="question">Q1: 文件A 存储格式？JSON（QClaw/OpenClaw）vs YAML（Hermes）？还是统一 JSON？</div>
+<div class="question">Q2: 文件A 路径？~/.echora/drafts/{aiType}.json 还是其他位置？</div>
+<div class="question">Q3: 启动时如果原配置被外部修改（用户手动改了），是否重新覆盖文件A？</div>
+<div class="question">Q4: 多窗口场景？两个 Echora 窗口同时编辑同一个文件A？</div>
+<div class="question">Q5: 保存失败（文件被锁/权限不足）的回滚策略？</div>
+
+<!-- 潜在坑位 -->
+<div class="node node-group">
+  <div class="title">🕳️ 潜在坑位</div>
+</div>
+
+<div class="node node-child node-red">
+  <div class="title">坑 1: 编码问题</div>
+  <div class="desc">Hermes 用 YAML，QClaw/OpenClaw 用 JSON</div>
+  <div class="desc">方案: 文件A 统一用 JSON，保存时转回原格式</div>
+</div>
+
+<div class="node node-child node-red">
+  <div class="title">坑 2: 字段名映射</div>
+  <div class="desc">UI 显示名 ≠ 配置文件字段名（如 "上下文长度" ≠ "contextWindow"）</div>
+  <div class="desc">方案: 需要字段映射表（fieldMap）</div>
+</div>
+
+<div class="node node-child node-red">
+  <div class="title">坑 3: 嵌套对象</div>
+  <div class="desc">修改 provider name → 需要同步更新 models 中的 fullPath</div>
+  <div class="desc">方案: 实现「级联更新」逻辑</div>
+</div>
+
+</div>
+</body>
+</html>

@@ -66,6 +66,16 @@ contextBridge.exposeInMainWorld('echora', {
     list: () => ipcRenderer.invoke('ai-config:list'),
   },
 
+  // ===== 草稿文件操作（配置编辑） =====
+  draft: {
+    read: (aiType) => ipcRenderer.invoke('draft:read', aiType),
+    write: (aiType, data) => ipcRenderer.invoke('draft:write', aiType, data),
+    save: (aiType) => ipcRenderer.invoke('draft:save', aiType),
+    reset: (aiType) => ipcRenderer.invoke('draft:reset', aiType),
+    backups: (aiType) => ipcRenderer.invoke('draft:backups', aiType),
+    paths: () => ipcRenderer.invoke('draft:paths'),
+  },
+
   // ===== Hermes 专用 =====
   hermes: {
     profiles: () => ipcRenderer.invoke('hermes:profiles'),

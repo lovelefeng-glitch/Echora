@@ -1,6 +1,6 @@
 {
   "name": "echora",
-  "version": "0.1.0",
+  "version": "0.7.0",
   "description": "打通本地 AI 软件壁垒，统一管理网关与对话 — Echo + Ora（声音+祈祷），让 AI 之间彼此听见",
   "main": "main.js",
   "scripts": {
@@ -11,7 +11,11 @@
     "verify": "node scripts/verify-closure.js .",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "electron-builder install-app-deps",
+    "test": "npx playwright test",
+    "test:headed": "npx playwright test --headed",
+    "test:debug": "npx playwright test --debug",
+    "test:report": "npx playwright show-report"
   },
   "build": {
     "appId": "com.echora.app",
@@ -41,6 +45,7 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "electron": "^33.0.0",
     "electron-builder": "^25.0.0"
   },

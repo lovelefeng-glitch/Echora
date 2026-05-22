@@ -1,6 +1,6 @@
 ﻿# 任务看板
 
-> **最后更新**: 2026-05-22 01:34  
+> **最后更新**: 2026-05-23 06:00  
 > **活跃开发者**: QClaw (qclaw) | 小雪 (xue)
 > **当前版本**: v0.6.0-dev
 
@@ -32,6 +32,7 @@
 | P0-5 | 流式闪烁光标改思考中动画 | ui | ✅ 已完成 |
 
 | P0-6 | 🐛 流式输出无法辨别状态：运行中 / 已完成 / 报错停止 | ui + adapters | ✅ 2026-05-21 |
+| P0-7 | 🐛 OpenClaw/QClaw 适配器 token 共用 → 401 | main | ✅ 2026-05-22 |
 ### 优先级 P1 — 核心功能
 
 | # | 任务 | 模块 | 标记 |
@@ -82,6 +83,19 @@
 | P2-7 | [F-9] 设置页面重构：二级菜单（左侧 AI 软件按钮 / 右侧对应配置数据） | ui | 📅 |
 
 | P2-8 | 📋 消息复制按钮：每条 AI 回复底部 + 顶部提供一键复制 | ui | ✅ 2026-05-21 |
+| P2-9 | 🏗️ 模块化拆分：Hermes 设置面板提取到 src/ai/hermes/ui-settings.js | ui (renderer) | 🔧 Sprint 6 |
+| P2-10 | 🏗️ 模块化拆分：工具调用弹窗提取到 src/ai/hermes/ui-tool-popup.js | ui (renderer) | 🔧 Sprint 6 |
+| P2-11 | 🏗️ 模块化拆分：Hermes模型重启轮询提取到 src/ai/hermes/ui-model-restart.js | ui (renderer) | 🔧 Sprint 6 |
+| P2-12 | 🏗️ 模块化拆分：Agent空状态渲染 + getAgentPort() 提取到 src/ai/shared/ui-helpers.js | ui (renderer) | 🔧 Sprint 6 |
+| P2-13 | 🔌 AI管理菜单：一键启用 HTTP Chat Endpoint | main + detectors | 📅 |
+| P2-14 | ⚙️ 系统设置页重构：二级菜单布局 + 完整参数展示 + Hermes YAML 解析 + DraftManager草稿系统 | ui + manager | ✅ 2026-05-23 |
+| P2-15 | 🏗️ renderer.js 模块化拆分 |
+| P2-16 | 🧪 Playwright Electron 自动化测试脚手架 | tests | ✅ 2026-05-23 |
+| P2-17 | 🐛 DraftManager normalize/denormalize 修复 | manager | ✅ 2026-05-23 |
+| P2-18 | 📚 项目知识库建设：ARCHITECTURE + DATA-FLOW + IPC-REFERENCE + CONFIG-REFERENCE + RECOVERY | docs | ✅ 2026-05-23 |
+| P2-19 | 📚 模块文档补全：api-server.md + echora-proxy.md + adapters.md 更新 | docs | ✅ 2026-05-23 |
+| P2-20 | 🩺 项目健康检查：17文件语法 + 12模块文档 + 8项历史遗漏补全 | docs | ✅ 2026-05-23 |
+| P2-21 | 💎 Obsidian 知识库同步：Echora 项目入口页备份存档 | docs | ✅ 2026-05-23 |
 > **P2-7 设计要点：**
 > - 当前：所有 AI 配置堆在一个长页面 → 后期 AI 多了会无限拉长
 > - 改为**二级菜单布局**：左侧是大块配置数据区，右侧是竖排 AI 软件图标按钮（窄栏）
@@ -114,6 +128,10 @@
 | P1-33 | 📊 消息底部 metrics 显示：completion_tokens + 延迟秒数 | ui + adapters | ✅ 2026-05-21 |
 | P1-34 | 🔧 工具调用持久化 + 弹窗增强：重启不丢失 + 工具名中文映射 + label 截断 | ui | ✅ 2026-05-21 |
 | P1-35 | 📐 模型信息合并到 hint 栏：状态·端口·模型·上下文·已用% + 模型选择器同行 | ui | ✅ 2026-05-21 |
+| P1-36 | 🐛 模型选择器隔离：各 AI 独立 model-selector，切换 AI 时清空/重建下拉框 | ui + adapters | ✅ 2026-05-22 |
+| P1-37 | 📊 QClaw/OpenClaw 信息面板对齐 Hermes：底部显示工具调用 + token 消耗 + prompt + 上下文长度 + 占用百分比 | ui + adapters | ✅ 2026-05-22 |
+| P1-38 | 🏗️ 适配器拆分：QClaw/OpenClaw 独立模块（qclaw-adapter.js + openclaw-adapter.js 清理 + main.js 注册） | adapters | ✅ 2026-05-22 |
+| P1-39 | 🐛 跨 Agent 消息路由修复：切换 Agent 后响应发回原窗口 + 未读通知卡片脉冲动画 | ui + renderer | ✅ 2026-05-22 |
 > **P1-27 子任务拆解：**
 > 1. AIDetector 识别 profiles 目录下的 agent → 渲染为独立 Agent 卡片（带 profile 名称）
 > 2. Profile Agent 未运行时：灰色灯 + 点击聊天区显示「▶️ 启动 minmin」（而非当前「Agent 未启动」通用提示）
@@ -285,3 +303,24 @@ P1-21~23 流式渲染 → P2-6 Markdown → P1-24~25 模型面板 → P1-26 模�
 | 2026-05-21~22 | P1-34 工具持久化: addMessage返回msg+loadConvMessages恢复+工具名中文映射+label截断 | 小雪 |
 | 2026-05-21~22 | P1-35 hint合并: model-info-bar内容移入hint栏+model-selector同行+端口强制8085 | 小雪 |
 | 2026-05-21~22 | Bug修复: onDone双重调用+taskkill /F+代理正则\\s→\s+getOrCreateAdapter端口覆盖 | 小雪 |
+| 2026-05-22 | 🆕 prompt token增量显示 (↑52.3K ↓1.8K) + 流式usage过滤 (tokensCaptured) | QClaw |
+| 2026-05-22 | 🆕 工具弹窗增强: emoji图标+中文名称+行为过程描述 + completed不覆盖running label | QClaw |
+| 2026-05-22 | 🆕 上下文持久化: echora_session_state.json按session存lastPrompt → 重启后恢复增量计算 | QClaw |
+| 2026-05-22 | 🆕 状态栏改为 Prompt/上下文窗口 (52.3K/262K · 20.0%) 替代旧格式 | QClaw |
+| 2026-05-22 | 🆕 切模型即时归零: switchModel清_lastModelInfo+Map → getModelInfo返回0/262K·0% | QClaw |
+| 2026-05-22 22:36 | Sprint 6 立项: P0-7 + P1-36~39 + P2-10~12 + P2-14 重新实现 | 小雪 |
+| 2026-05-22 22:45 | P1-36 模型选择器隔离: selectedModel{} + selectAgent清空selector + loadModelInfo按aiType恢复 | 小雪 |
+| 2026-05-22 22:50 | P1-39 跨Agent消息路由: activeStreams追踪 + onDone用streamInfo路由 + _updateStreamMessageInConv + 通知函数 | 小雪 |
+| 2026-05-22 22:52 | P0-7+P1-38 适配器拆分: qclaw-adapter.js新建(v1.0) + openclaw-adapter.js清理(v1.2) + main.js注册分流 + token分离加载 | 小雪 |
+| 2026-05-22 23:05 | P2-14 系统设置页重构: HTML两栏布局 + CSS设置样式 + renderSettingsSidebar + _showSettingsPanel + _renderAISettingsPanel + _renderParamGroup | 小雪 |
+| 2026-05-23 00:55 | P0-7 fix: main.js缺失fs模块导入 + OpenClaw适配器增加调试日志 + 端口默认值修复 | 小雪 |
+| 2026-05-23 01:18 | fix: 适配器超时从15s→5min + HTML残留hermes-label片段删除 | 小雪 |
+| 2026-05-23 01:30 | P2-14 扩展: config-reader读取30+参数(含中文label) + 设置面板折叠功能 + Hermes 12组参数展示 | 小雪 |
+| 2026-05-23 01:52 | P2-14 v3: Agent详情(ID/工作空间/主模型/备用模型) + Model详情(contextWindow/maxTokens/fullPath) + 折叠标题 | 小雪 |
+| 2026-05-23 02:35 | P2-14 v4: 大卡片包小卡片布局 + 配置路径行(📂手动/🔍自动搜索) + 浮动保存按钮 + 可编辑字段 + 无配置引导 | 小雪 |
+| 2026-05-23 03:40 | P2-14 v5: DraftManager草稿文件系统 + 启动初始化 + 保存/重置按钮 + 备份机制 + IPC通道 | 小雪 |
+| 2026-05-23 04:35 | P2-16: Playwright Electron 自动化测试脚手架（smoke/adapters/settings/chat 4个测试文件） | 小雪 |
+| 2026-05-23 04:50 | P2-17: DraftManager normalize/denormalize 修复 - 草稿文件从 raw 复制改为 normalize 转换，保存时 denormalize 还原 | 小雪 |
+| 2026-05-23 04:55 | 文档全量更新: BLUEPRINT v0.4.0 + MASTER 模块地图 + draft-manager.md + config-reader.md 新建 | 小雪 |
+| 2026-05-23 05:10 | 项目健康检查: 17文件语法全通过 + 12模块文档完整 + 8项历史遗漏补全 + 报告 health-check_2026-05-23.md | 小雪 |
+| 2026-05-23 06:00 | 看板修正: P2-14完成日期更新 + P2-18~21任务补录 + P2-17状态冲突修复 + Obsidian知识库同步 | 小雪 |
