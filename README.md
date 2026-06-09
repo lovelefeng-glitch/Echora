@@ -222,10 +222,6 @@ npm run build:win        # 构建 Windows 版本
 npm run build:portable   # 构建便携版
 ```
 
-## 📸 界面预览
-
-![Echora 2.0 界面](screenshots/echora-2.0-main.png)
-
 ## 📝 更新日志
 
 ### v2.0.0 (2026-06-10)
