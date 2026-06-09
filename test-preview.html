@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>预览功能测试</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .test-section {
+      background: white;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    h2 { margin-top: 0; color: #333; }
+    button {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-right: 8px;
+      margin-bottom: 8px;
+    }
+    button:hover { background: #2563eb; }
+    pre {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 12px;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎯 并排预览功能测试</h1>
+  
+  <div class="test-section">
+    <h2>1. 网页预览测试</h2>
+    <p>点击按钮在右侧预览面板显示网页：</p>
+    <button onclick="testUrlPreview()">预览百度</button>
+    <button onclick="testHtmlPreview()">预览 HTML</button>
+  </div>
+
+  <div class="test-section">
+    <h2>2. 代码预览测试</h2>
+    <p>点击按钮在右侧预览面板显示代码：</p>
+    <button onclick="testCodePreview('javascript')">JavaScript</button>
+    <button onclick="testCodePreview('python')">Python</button>
+    <button onclick="testCodePreview('css')">CSS</button>
+  </div>
+
+  <div class="test-section">
+    <h2>3. 控制台预览测试</h2>
+    <p>点击按钮在右侧预览面板显示日志：</p>
+    <button onclick="testConsolePreview()">显示日志</button>
+  </div>
+
+  <div class="test-section">
+    <h2>4. 快捷键测试</h2>
+    <p>按 <kbd>Ctrl+P</kbd> 切换预览面板</p>
+  </div>
+
+  <div class="test-section">
+    <h2>5. 代码示例</h2>
+    <pre>// 在控制台中测试（F12 打开开发者工具）
+// 1. 显示网页预览
+window.echora?.preview?.show({ type: 'url', url: 'https://www.baidu.com', title: '百度' })
+
+// 2. 显示 HTML 预览
+window.echora?.preview?.show({ 
+  type: 'html', 
+  html: '&lt;h1&gt;Hello World&lt;/h1&gt;&lt;p style="color: blue;"&gt;这是 HTML 预览&lt;/p&gt;',
+  title: 'HTML 测试'
+})
+
+// 3. 显示代码预览
+window.echora?.preview?.show({
+  type: 'file',
+  content: 'function hello() {\n  console.log("Hello!");\n}',
+  language: 'javascript',
+  path: 'test.js'
+})
+
+// 4. 显示控制台日志
+window.echora?.preview?.show({
+  type: 'console',
+  logs: [
+    { level: 'info', message: '应用启动', timestamp: Date.now() },
+    { level: 'warn', message: '内存使用率较高', timestamp: Date.now() },
+    { level: 'error', message: '连接失败', timestamp: Date.now() }
+  ]
+})
+
+// 5. 关闭预览面板
+window.echora?.preview?.hide()
+    </pre>
+  </div>
+
+  <script>
+    function testUrlPreview() {
+      // 这个需要在 Electron 环境中运行
+      console.log('请在 Electron 应用中测试此功能')
+      alert('请在 Echora 应用中按 Ctrl+P 打开预览面板，然后在控制台中执行：\n\nwindow.echora?.preview?.show({ type: "url", url: "https://www.baidu.com" })')
+    }
+
+    function testHtmlPreview() {
+      alert('请在 Echora 应用中按 Ctrl+P 打开预览面板，然后在控制台中执行：\n\nwindow.echora?.preview?.show({ type: "html", html: "&lt;h1&gt;Hello&lt;/h1&gt;" })')
+    }
+
+    function testCodePreview(lang) {
+      const codes = {
+        javascript: 'function hello() {\n  console.log("Hello World!");\n  return 42;\n}',
+        python: 'def hello():\n    print("Hello World!")\n    return 42',
+        css: '.container {\n  display: flex;\n  justify-content: center;\n  align-items: center;\n}'
+      };
+      alert(`请在 Echora 应用中按 Ctrl+P 打开预览面板，然后在控制台中执行：\n\nwindow.echora?.preview?.show({ type: "file", content: "...", language: "${lang}" })`)
+    }
+
+    function testConsolePreview() {
+      alert('请在 Echora 应用中按 Ctrl+P 打开预览面板，然后在控制台中执行：\n\nwindow.echora?.preview?.show({ type: "console", logs: [...] })')
+    }
+  </script>
+</body>
+</html>
