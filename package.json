@@ -1,0 +1,137 @@
+{
+  "name": "echora-2",
+  "version": "2.0.0",
+  "description": "Echora 2.0 - 全能 AI 工作台：本地网关管理 + 直连 API",
+  "main": "./out/main/index.js",
+  "author": "",
+  "license": "MIT",
+  "build": {
+    "appId": "com.echora.app",
+    "productName": "Echora",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**/*",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "sign": false,
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Echora"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.icns",
+      "category": "public.app-category.developer-tools"
+    },
+    "dmg": {
+      "background": "build/background.png",
+      "iconSize": 100,
+      "iconTextSize": 12,
+      "window": {
+        "width": 660,
+        "height": 400
+      }
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "Development"
+    },
+    "fileAssociations": [
+      {
+        "ext": "echora",
+        "name": "Echora Config",
+        "description": "Echora 配置文件",
+        "mimeType": "application/x-echora"
+      }
+    ]
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "preview:browser": "vite --config vite.browser.config.ts",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "start": "electron-vite preview",
+    "postinstall": "electron-builder install-app-deps",
+    "build:unpack": "npm run build && electron-builder --dir",
+    "build:win": "npm run build && electron-builder --win --x64",
+    "build:mac": "npm run build && electron-builder --mac",
+    "build:linux": "npm run build && electron-builder --linux",
+    "build:portable": "npm run build && electron-builder --win portable --x64",
+    "test": "vitest run",
+    "test:unit": "vitest run --reporter=verbose",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\"",
+    "backup": "powershell -ExecutionPolicy Bypass -File scripts/backup.ps1"
+  },
+  "dependencies": {
+    "electron-store": "^8.2.0",
+    "js-yaml": "^4.2.0",
+    "marked": "^15.0.0",
+    "shiki": "^4.2.0",
+    "tiktoken": "^1.0.22",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@tailwindcss/vite": "^4.3.0",
+    "@testing-library/jest-dom": "^6.6.0",
+    "@testing-library/react": "^16.1.0",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/ws": "^8.5.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "electron": "^42.3.3",
+    "electron-builder": "^25.0.0",
+    "electron-vite": "^2.3.0",
+    "eslint": "^9.0.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "happy-dom": "^15.0.0",
+    "prettier": "^3.4.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwindcss": "^4.3.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0",
+    "zustand": "^5.0.0"
+  }
+}

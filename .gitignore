@@ -1,0 +1,39 @@
+node_modules
+dist
+out
+release
+*.log
+.DS_Store
+Thumbs.db
+.vite
+backup/
+backup_*/
+
+# User data
+conversations/
+drafts/
+echora-config.json
+echora-conversations.json
+
+# IDE / AI tools
+.claude/
+.trae/
+.workbuddy/
+
+# Test artifacts
+playwright-report/
+test-results/
+test-*.txt
+
+# Build artifacts
+*.zip
+*.exe
+*.dmg
+*.AppImage
+
+# Archive
+archive/
+
+# Misc
+nul
+nul.txt
