@@ -17,7 +17,7 @@
 
 Echora 是一个桌面应用，让你在一个界面里管理和使用所有 AI 工具。无论你用的是 OpenClaw、Hermes、QClaw 还是其他 AI 服务，Echora 都能把它们整合到一起——统一的对话界面、统一的 Agent 管理、统一的文件预览。
 
-![Echora 2.0 界面预览](screenshots/electron/01-chat-default.png)
+![Echora 2.0 界面预览](screenshots/echora-2.0-main.png)
 
 ## 🔥 核心功能
 
@@ -224,13 +224,7 @@ npm run build:portable   # 构建便携版
 
 ## 📸 界面预览
 
-| 对话界面 | Agent 管理 | 设置面板 |
-|---------|-----------|---------|
-| ![对话](screenshots/electron/01-chat-default.png) | ![Agent](screenshots/electron/08-ai-mgmt.png) | ![设置](screenshots/electron/04-settings-global.png) |
-
-| 深色主题 | 工具调用 | 技能管理 |
-|---------|---------|---------|
-| ![深色](screenshots/electron/10-chat-dark.png) | ![工具](screenshots/electron/02-chat-agent.png) | ![技能](screenshots/electron/09-skills.png) |
+![Echora 2.0 界面](screenshots/echora-2.0-main.png)
 
 ## 📝 更新日志
 
