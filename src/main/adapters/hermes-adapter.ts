@@ -37,7 +37,7 @@ function logAdapter(level: string, msg: string, data?: unknown): void {
 const PROXY_PORT = 8085
 export const DIRECT_PORT = 8083
 const DEFAULT_API_PORT = DIRECT_PORT  // Proxy 已停用，直连 Hermes
-const API_KEY = '[REDACTED]'
+const API_KEY = process.env.ECHORA_API_KEY || 'changeme'
 
 interface HermesConfig extends AdapterConfig {
   hermesRoot?: string
@@ -1492,7 +1492,7 @@ export class HermesAdapter extends BaseAdapter<HermesConfig> {
       }
 
       if (!content.includes('API_SERVER_KEY')) {
-        content += '\nAPI_SERVER_KEY=[REDACTED]\n'
+        content += `\nAPI_SERVER_KEY=${API_KEY}\n`
         modified = true
       }
 

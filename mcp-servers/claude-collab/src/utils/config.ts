@@ -19,7 +19,7 @@ export interface AIConfig {
 const DEFAULT_CONFIG: AIConfig = {
   hermes: {
     port: 8083,
-    apiKey: '[REDACTED]',
+    apiKey: process.env.ECHORA_API_KEY || '',
     baseUrl: 'http://127.0.0.1:8083'
   },
   openclaw: {
